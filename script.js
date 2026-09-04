@@ -477,58 +477,22 @@
   // a card rests on the floor unless its footprint overlaps another card, in
   // which case it lands just above the highest card it overlaps — keeps
   // memories from clipping through each other (or the floor) while still
-  // letting them overlap and pile up naturally. Also reports how many cards
-  // deep that landing spot is (see resolvePlacement) — a heavily tilted card
-  // can span a lot of vertical space on its own, so raw height isn't a
-  // reliable stand-in for "how tall a pile this really is"; a simple layer
-  // count is, and doesn't get thrown off by any one card's own tilt.
+  // letting them overlap and pile up naturally. Always lands exactly where
+  // it's placed/dropped — x/z are never adjusted — relying on the small
+  // per-layer clearance above to keep even a deep pile visually flat rather
+  // than needing to redistribute cards sideways once a pile gets tall.
   function landingSpot(x, z, ex, ez, vSpanFloor, stackClearance, excludeRecord) {
     let y = INTERIOR.yFloor + vSpanFloor;
-    let depth = 0;
     for (const rec of state.memories) {
       if (rec === excludeRecord) continue;
       const g = rec.group;
       if (footprintsOverlap(x, z, ex, ez, g.position.x, g.position.z, g.userData.halfExtentX, g.userData.halfExtentZ)) {
         const otherTop = g.userData.baseY + g.userData.stackClearance;
         const candidate = otherTop + STACK_GAP + stackClearance;
-        if (candidate > y) {
-          y = candidate;
-          depth = g.userData.stackDepth + 1;
-        }
+        if (candidate > y) y = candidate;
       }
     }
-    return { y, depth };
-  }
-
-  // a real pile of photos doesn't grow into an infinite tower — once it gets
-  // a few layers deep it starts spilling sideways instead. Cap how many
-  // cards deep a stack is allowed to get at one exact spot; once a
-  // placement would land deeper than that, nudge sideways by a few
-  // centimeters and try again (like a card sliding a bit off an unstable
-  // pile) until it finds room that isn't already piled so deep
-  const MAX_STACK_DEPTH = 5;
-  const NUDGE_ATTEMPTS = 8;
-
-  function resolvePlacement(x, z, ex, ez, vSpanFloor, stackClearance, excludeRecord) {
-    let px = x, pz = z;
-    // the nudge has to clear the card's own footprint to actually escape the
-    // pile it's sliding off of — a nudge much smaller than the card itself
-    // just lands it slightly to one side of the SAME pile, still overlapping
-    // and still stacking upward. Growing the distance each attempt handles
-    // dense areas where a couple of hops aren't enough to find open floor.
-    const step = (ex + ez) * 0.7;
-    for (let attempt = 0; attempt < NUDGE_ATTEMPTS; attempt++) {
-      const spot = landingSpot(px, pz, ex, ez, vSpanFloor, stackClearance, excludeRecord);
-      if (spot.depth <= MAX_STACK_DEPTH) {
-        return { x: px, z: pz, y: spot.y, depth: spot.depth };
-      }
-      const angle = Math.random() * Math.PI * 2;
-      const nudge = step * (1 + attempt * 0.5) * (0.85 + Math.random() * 0.3);
-      px = THREE.MathUtils.clamp(x + Math.cos(angle) * nudge, INTERIOR.xMin + ex, INTERIOR.xMax - ex);
-      pz = THREE.MathUtils.clamp(z + Math.sin(angle) * nudge, INTERIOR.zMin + ez, INTERIOR.zMax - ez);
-    }
-    const spot = landingSpot(px, pz, ex, ez, vSpanFloor, stackClearance, excludeRecord);
-    return { x: px, z: pz, y: spot.y, depth: spot.depth };
+    return y;
   }
 
   function buildMemoryTexture(img, borderStyle) {
@@ -633,12 +597,9 @@
       const { ex, ez } = cardHalfExtents(w, h, transform.rotY, transform.scale);
       const vSpan = cardVerticalHalfSpan(w, h, transform.rotX, transform.rotZ, transform.scale);
       const stackClearance = cardStackClearance(w, h, transform.rotX, transform.rotZ, transform.scale);
-      const clampedX = THREE.MathUtils.clamp(transform.x, INTERIOR.xMin + ex, INTERIOR.xMax - ex);
-      const clampedZ = THREE.MathUtils.clamp(transform.z, INTERIOR.zMin + ez, INTERIOR.zMax - ez);
-      const placed = resolvePlacement(clampedX, clampedZ, ex, ez, vSpan, stackClearance, undefined);
-      transform.x = placed.x;
-      transform.z = placed.z;
-      transform.y = placed.y;
+      transform.x = THREE.MathUtils.clamp(transform.x, INTERIOR.xMin + ex, INTERIOR.xMax - ex);
+      transform.z = THREE.MathUtils.clamp(transform.z, INTERIOR.zMin + ez, INTERIOR.zMax - ez);
+      transform.y = landingSpot(transform.x, transform.z, ex, ez, vSpan, stackClearance, undefined);
 
       const geo = new THREE.BoxGeometry(w, h, 0.012);
       const frontMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 });
@@ -666,7 +627,6 @@
       group.userData.halfExtentZ = ez;
       group.userData.verticalHalfSpan = vSpan;
       group.userData.stackClearance = stackClearance;
-      group.userData.stackDepth = placed.depth;
       group.userData.lifted = false;
 
       boxGroup.add(group);
@@ -835,8 +795,8 @@
       // not the card's old resting height — otherwise dragging a card over a
       // tall stack lets it visibly sink into that stack mid-drag, only
       // correcting itself once dropped
-      const hoverSpot = landingSpot(target.x, target.z, dragUD.halfExtentX, dragUD.halfExtentZ, dragUD.verticalHalfSpan, dragUD.stackClearance, state.dragging);
-      state.dragging.group.position.y = hoverSpot.y + 0.05;
+      const hoverY = landingSpot(target.x, target.z, dragUD.halfExtentX, dragUD.halfExtentZ, dragUD.verticalHalfSpan, dragUD.stackClearance, state.dragging);
+      state.dragging.group.position.y = hoverY + 0.05;
 
       if (state.pointerMoved) {
         trashZone.classList.add('show');
@@ -886,16 +846,12 @@
       }
 
       const ud = rec.group.userData;
-      const placed = resolvePlacement(rec.group.position.x, rec.group.position.z, ud.halfExtentX, ud.halfExtentZ, ud.verticalHalfSpan, ud.stackClearance, rec);
-      ud.baseY = placed.y;
-      ud.stackDepth = placed.depth;
-      rec.group.position.x = placed.x;
-      rec.group.position.y = placed.y;
-      rec.group.position.z = placed.z;
-      rec.transform.x = placed.x;
-      rec.transform.y = placed.y;
-      rec.transform.z = placed.z;
-      playPaperDrop();
+      const newY = landingSpot(rec.group.position.x, rec.group.position.z, ud.halfExtentX, ud.halfExtentZ, ud.verticalHalfSpan, ud.stackClearance, rec);
+      ud.baseY = newY;
+      rec.group.position.y = newY;
+      rec.transform.x = rec.group.position.x;
+      rec.transform.y = newY;
+      rec.transform.z = rec.group.position.z;
       const wasClick = !state.pointerMoved && (performance.now() - state.pointerDownTime) < 350;
       state.dragging = null;
       if (wasClick) openMemoryViewer(rec);
