@@ -430,6 +430,39 @@
 
   /* ----------------------------- memory objects ----------------------------- */
   const MEM_BASE_SIZE = 0.62; // longest edge in world units
+  const MEM_HALF_THICKNESS = 0.006; // half of the card geometry's 0.012 depth
+  const STACK_GAP = 0.003; // small clearance between stacked cards so they never touch exactly
+
+  // axis-aligned half-extents of a card's footprint once spun by rotY —
+  // used both to keep cards from poking through the walls regardless of
+  // rotation, and to detect when two cards' footprints overlap for stacking
+  function cardHalfExtents(w, h, rotY, scale) {
+    const hw = (w / 2) * scale, hh = (h / 2) * scale;
+    const c = Math.abs(Math.cos(rotY)), s = Math.abs(Math.sin(rotY));
+    return { ex: hw * c + hh * s, ez: hw * s + hh * c };
+  }
+
+  function footprintsOverlap(ax, az, aex, aez, bx, bz, bex, bez) {
+    return Math.abs(ax - bx) < (aex + bex) && Math.abs(az - bz) < (aez + bez);
+  }
+
+  // a card rests on the floor unless its footprint overlaps another card, in
+  // which case it lands just above the highest card it overlaps — keeps
+  // memories from clipping through each other while still letting them
+  // overlap and pile up naturally
+  function landingY(x, z, ex, ez, scale, excludeRecord) {
+    let y = INTERIOR.yFloor;
+    for (const rec of state.memories) {
+      if (rec === excludeRecord) continue;
+      const g = rec.group;
+      if (footprintsOverlap(x, z, ex, ez, g.position.x, g.position.z, g.userData.halfExtentX, g.userData.halfExtentZ)) {
+        const otherTop = g.userData.baseY + MEM_HALF_THICKNESS * g.userData.baseScale;
+        const candidate = otherTop + STACK_GAP + MEM_HALF_THICKNESS * scale;
+        if (candidate > y) y = candidate;
+      }
+    }
+    return y;
+  }
 
   function buildMemoryTexture(img, borderStyle) {
     const maxDim = 900;
@@ -487,7 +520,9 @@
     return {
       x: THREE.MathUtils.randFloat(INTERIOR.xMin + margin, INTERIOR.xMax - margin),
       z: THREE.MathUtils.randFloat(INTERIOR.zMin + margin, INTERIOR.zMax - margin),
-      y: INTERIOR.yFloor + index * 0.0065 + Math.random() * 0.002,
+      // y is recomputed in createMemoryObject once the card's real footprint
+      // and any overlaps are known — this is just a placeholder
+      y: INTERIOR.yFloor,
       // spin around the vertical axis, like a photo casually tossed onto a surface
       rotY: rotY,
       // natural tilt so cards don't all lie perfectly flat/aligned
@@ -523,6 +558,16 @@
       let w = MEM_BASE_SIZE, h = MEM_BASE_SIZE;
       if (aspect >= 1) h = w / aspect; else w = h * aspect;
 
+      // clamp into the interior accounting for this card's actual rotated
+      // footprint (not just its center point), so it can never poke through
+      // a wall regardless of size/aspect/rotation; then land it on the floor
+      // or on top of whatever it overlaps, so cards can pile up without
+      // clipping through each other
+      const { ex, ez } = cardHalfExtents(w, h, transform.rotY, transform.scale);
+      transform.x = THREE.MathUtils.clamp(transform.x, INTERIOR.xMin + ex, INTERIOR.xMax - ex);
+      transform.z = THREE.MathUtils.clamp(transform.z, INTERIOR.zMin + ez, INTERIOR.zMax - ez);
+      transform.y = landingY(transform.x, transform.z, ex, ez, transform.scale);
+
       const geo = new THREE.BoxGeometry(w, h, 0.012);
       const frontMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 });
       const backMat = new THREE.MeshStandardMaterial({ map: backTex, roughness: 0.9 });
@@ -545,6 +590,8 @@
       group.scale.setScalar(transform.scale);
       group.userData.baseY = transform.y;
       group.userData.baseScale = transform.scale;
+      group.userData.halfExtentX = ex;
+      group.userData.halfExtentZ = ez;
       group.userData.lifted = false;
 
       boxGroup.add(group);
@@ -704,8 +751,9 @@
       raycaster.setFromCamera(pointerNDC, camera);
       raycaster.ray.intersectPlane(dragPlane, dragPoint);
       const target = dragPoint.clone().add(state.dragOffset);
-      target.x = THREE.MathUtils.clamp(target.x, INTERIOR.xMin, INTERIOR.xMax);
-      target.z = THREE.MathUtils.clamp(target.z, INTERIOR.zMin, INTERIOR.zMax);
+      const dragUD = state.dragging.group.userData;
+      target.x = THREE.MathUtils.clamp(target.x, INTERIOR.xMin + dragUD.halfExtentX, INTERIOR.xMax - dragUD.halfExtentX);
+      target.z = THREE.MathUtils.clamp(target.z, INTERIOR.zMin + dragUD.halfExtentZ, INTERIOR.zMax - dragUD.halfExtentZ);
       state.dragging.group.position.x = target.x;
       state.dragging.group.position.z = target.z;
       state.dragging.group.position.y = state.dragging.group.userData.baseY + 0.05;
@@ -757,8 +805,12 @@
         return;
       }
 
-      rec.group.position.y = rec.group.userData.baseY;
+      const ud = rec.group.userData;
+      const newY = landingY(rec.group.position.x, rec.group.position.z, ud.halfExtentX, ud.halfExtentZ, ud.baseScale, rec);
+      ud.baseY = newY;
+      rec.group.position.y = newY;
       rec.transform.x = rec.group.position.x;
+      rec.transform.y = newY;
       rec.transform.z = rec.group.position.z;
       playPaperDrop();
       const wasClick = !state.pointerMoved && (performance.now() - state.pointerDownTime) < 350;
