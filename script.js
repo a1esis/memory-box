@@ -446,18 +446,31 @@
     return Math.abs(ax - bx) < (aex + bex) && Math.abs(az - bz) < (aez + bez);
   }
 
+  // half of a (possibly tilted) card's total vertical extent, measured from
+  // its own center. rotY doesn't matter here — spinning around the vertical
+  // axis never changes how tall a flat plane is — but rotX/rotZ tilt does:
+  // a tilted card's far corner droops down (and the opposite corner lifts
+  // up) by roughly half-width*sin(rotZ) + half-height*sin(rotX), which for a
+  // large, noticeably-tilted card is far bigger than the card's own
+  // thickness and was enough to poke its low corner through the floor
+  function cardVerticalHalfSpan(w, h, rotX, rotZ, scale) {
+    const hw = (w / 2) * scale, hh = (h / 2) * scale;
+    const tiltDrop = hw * Math.abs(Math.sin(rotZ)) * Math.cos(rotX) + hh * Math.abs(Math.sin(rotX));
+    return MEM_HALF_THICKNESS * scale + tiltDrop;
+  }
+
   // a card rests on the floor unless its footprint overlaps another card, in
   // which case it lands just above the highest card it overlaps — keeps
-  // memories from clipping through each other while still letting them
-  // overlap and pile up naturally
-  function landingY(x, z, ex, ez, scale, excludeRecord) {
-    let y = INTERIOR.yFloor;
+  // memories from clipping through each other (or the floor) while still
+  // letting them overlap and pile up naturally
+  function landingY(x, z, ex, ez, vSpan, excludeRecord) {
+    let y = INTERIOR.yFloor + vSpan;
     for (const rec of state.memories) {
       if (rec === excludeRecord) continue;
       const g = rec.group;
       if (footprintsOverlap(x, z, ex, ez, g.position.x, g.position.z, g.userData.halfExtentX, g.userData.halfExtentZ)) {
-        const otherTop = g.userData.baseY + MEM_HALF_THICKNESS * g.userData.baseScale;
-        const candidate = otherTop + STACK_GAP + MEM_HALF_THICKNESS * scale;
+        const otherTop = g.userData.baseY + g.userData.verticalHalfSpan;
+        const candidate = otherTop + STACK_GAP + vSpan;
         if (candidate > y) y = candidate;
       }
     }
@@ -564,9 +577,10 @@
       // or on top of whatever it overlaps, so cards can pile up without
       // clipping through each other
       const { ex, ez } = cardHalfExtents(w, h, transform.rotY, transform.scale);
+      const vSpan = cardVerticalHalfSpan(w, h, transform.rotX, transform.rotZ, transform.scale);
       transform.x = THREE.MathUtils.clamp(transform.x, INTERIOR.xMin + ex, INTERIOR.xMax - ex);
       transform.z = THREE.MathUtils.clamp(transform.z, INTERIOR.zMin + ez, INTERIOR.zMax - ez);
-      transform.y = landingY(transform.x, transform.z, ex, ez, transform.scale);
+      transform.y = landingY(transform.x, transform.z, ex, ez, vSpan, undefined);
 
       const geo = new THREE.BoxGeometry(w, h, 0.012);
       const frontMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 });
@@ -592,6 +606,7 @@
       group.userData.baseScale = transform.scale;
       group.userData.halfExtentX = ex;
       group.userData.halfExtentZ = ez;
+      group.userData.verticalHalfSpan = vSpan;
       group.userData.lifted = false;
 
       boxGroup.add(group);
@@ -760,7 +775,7 @@
       // not the card's old resting height — otherwise dragging a card over a
       // tall stack lets it visibly sink into that stack mid-drag, only
       // correcting itself once dropped
-      const hoverFloor = landingY(target.x, target.z, dragUD.halfExtentX, dragUD.halfExtentZ, dragUD.baseScale, state.dragging);
+      const hoverFloor = landingY(target.x, target.z, dragUD.halfExtentX, dragUD.halfExtentZ, dragUD.verticalHalfSpan, state.dragging);
       state.dragging.group.position.y = hoverFloor + 0.05;
 
       if (state.pointerMoved) {
@@ -811,7 +826,7 @@
       }
 
       const ud = rec.group.userData;
-      const newY = landingY(rec.group.position.x, rec.group.position.z, ud.halfExtentX, ud.halfExtentZ, ud.baseScale, rec);
+      const newY = landingY(rec.group.position.x, rec.group.position.z, ud.halfExtentX, ud.halfExtentZ, ud.verticalHalfSpan, rec);
       ud.baseY = newY;
       rec.group.position.y = newY;
       rec.transform.x = rec.group.position.x;
