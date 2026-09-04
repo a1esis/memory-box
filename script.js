@@ -459,6 +459,21 @@
     return MEM_HALF_THICKNESS * scale + tiltDrop;
   }
 
+  // clearance used BETWEEN stacked cards — deliberately much smaller than a
+  // card's full tilt-aware vertical span. That full span is needed against
+  // the floor (a large, always-visible hard surface), but using it between
+  // every pair of stacked cards too meant a handful of ordinarily-tilted
+  // photos could add far more height per layer than a real thin photo pile
+  // ever would, making stacks look like they were floating. Capping the
+  // tilt contribution here keeps piles low and flat while still leaving a
+  // little give so a modestly tilted card doesn't dig into the one below it.
+  const STACK_TILT_CAP = 0.003;
+  function cardStackClearance(w, h, rotX, rotZ, scale) {
+    const hw = (w / 2) * scale, hh = (h / 2) * scale;
+    const tiltDrop = hw * Math.abs(Math.sin(rotZ)) * Math.cos(rotX) + hh * Math.abs(Math.sin(rotX));
+    return MEM_HALF_THICKNESS * scale + Math.min(tiltDrop, STACK_TILT_CAP);
+  }
+
   // a card rests on the floor unless its footprint overlaps another card, in
   // which case it lands just above the highest card it overlaps — keeps
   // memories from clipping through each other (or the floor) while still
@@ -467,15 +482,15 @@
   // can span a lot of vertical space on its own, so raw height isn't a
   // reliable stand-in for "how tall a pile this really is"; a simple layer
   // count is, and doesn't get thrown off by any one card's own tilt.
-  function landingSpot(x, z, ex, ez, vSpan, excludeRecord) {
-    let y = INTERIOR.yFloor + vSpan;
+  function landingSpot(x, z, ex, ez, vSpanFloor, stackClearance, excludeRecord) {
+    let y = INTERIOR.yFloor + vSpanFloor;
     let depth = 0;
     for (const rec of state.memories) {
       if (rec === excludeRecord) continue;
       const g = rec.group;
       if (footprintsOverlap(x, z, ex, ez, g.position.x, g.position.z, g.userData.halfExtentX, g.userData.halfExtentZ)) {
-        const otherTop = g.userData.baseY + g.userData.verticalHalfSpan;
-        const candidate = otherTop + STACK_GAP + vSpan;
+        const otherTop = g.userData.baseY + g.userData.stackClearance;
+        const candidate = otherTop + STACK_GAP + stackClearance;
         if (candidate > y) {
           y = candidate;
           depth = g.userData.stackDepth + 1;
@@ -494,7 +509,7 @@
   const MAX_STACK_DEPTH = 5;
   const NUDGE_ATTEMPTS = 8;
 
-  function resolvePlacement(x, z, ex, ez, vSpan, excludeRecord) {
+  function resolvePlacement(x, z, ex, ez, vSpanFloor, stackClearance, excludeRecord) {
     let px = x, pz = z;
     // the nudge has to clear the card's own footprint to actually escape the
     // pile it's sliding off of — a nudge much smaller than the card itself
@@ -503,7 +518,7 @@
     // dense areas where a couple of hops aren't enough to find open floor.
     const step = (ex + ez) * 0.7;
     for (let attempt = 0; attempt < NUDGE_ATTEMPTS; attempt++) {
-      const spot = landingSpot(px, pz, ex, ez, vSpan, excludeRecord);
+      const spot = landingSpot(px, pz, ex, ez, vSpanFloor, stackClearance, excludeRecord);
       if (spot.depth <= MAX_STACK_DEPTH) {
         return { x: px, z: pz, y: spot.y, depth: spot.depth };
       }
@@ -512,7 +527,7 @@
       px = THREE.MathUtils.clamp(x + Math.cos(angle) * nudge, INTERIOR.xMin + ex, INTERIOR.xMax - ex);
       pz = THREE.MathUtils.clamp(z + Math.sin(angle) * nudge, INTERIOR.zMin + ez, INTERIOR.zMax - ez);
     }
-    const spot = landingSpot(px, pz, ex, ez, vSpan, excludeRecord);
+    const spot = landingSpot(px, pz, ex, ez, vSpanFloor, stackClearance, excludeRecord);
     return { x: px, z: pz, y: spot.y, depth: spot.depth };
   }
 
@@ -617,9 +632,10 @@
       // clipping through each other
       const { ex, ez } = cardHalfExtents(w, h, transform.rotY, transform.scale);
       const vSpan = cardVerticalHalfSpan(w, h, transform.rotX, transform.rotZ, transform.scale);
+      const stackClearance = cardStackClearance(w, h, transform.rotX, transform.rotZ, transform.scale);
       const clampedX = THREE.MathUtils.clamp(transform.x, INTERIOR.xMin + ex, INTERIOR.xMax - ex);
       const clampedZ = THREE.MathUtils.clamp(transform.z, INTERIOR.zMin + ez, INTERIOR.zMax - ez);
-      const placed = resolvePlacement(clampedX, clampedZ, ex, ez, vSpan, undefined);
+      const placed = resolvePlacement(clampedX, clampedZ, ex, ez, vSpan, stackClearance, undefined);
       transform.x = placed.x;
       transform.z = placed.z;
       transform.y = placed.y;
@@ -649,6 +665,7 @@
       group.userData.halfExtentX = ex;
       group.userData.halfExtentZ = ez;
       group.userData.verticalHalfSpan = vSpan;
+      group.userData.stackClearance = stackClearance;
       group.userData.stackDepth = placed.depth;
       group.userData.lifted = false;
 
@@ -818,7 +835,7 @@
       // not the card's old resting height — otherwise dragging a card over a
       // tall stack lets it visibly sink into that stack mid-drag, only
       // correcting itself once dropped
-      const hoverSpot = landingSpot(target.x, target.z, dragUD.halfExtentX, dragUD.halfExtentZ, dragUD.verticalHalfSpan, state.dragging);
+      const hoverSpot = landingSpot(target.x, target.z, dragUD.halfExtentX, dragUD.halfExtentZ, dragUD.verticalHalfSpan, dragUD.stackClearance, state.dragging);
       state.dragging.group.position.y = hoverSpot.y + 0.05;
 
       if (state.pointerMoved) {
@@ -869,7 +886,7 @@
       }
 
       const ud = rec.group.userData;
-      const placed = resolvePlacement(rec.group.position.x, rec.group.position.z, ud.halfExtentX, ud.halfExtentZ, ud.verticalHalfSpan, rec);
+      const placed = resolvePlacement(rec.group.position.x, rec.group.position.z, ud.halfExtentX, ud.halfExtentZ, ud.verticalHalfSpan, ud.stackClearance, rec);
       ud.baseY = placed.y;
       ud.stackDepth = placed.depth;
       rec.group.position.x = placed.x;
