@@ -37,12 +37,19 @@
     xMax: BOX.width / 2 - BOX.wall - 0.12,
     zMin: -BOX.depth / 2 + BOX.wall + 0.10,
     zMax: BOX.depth / 2 - BOX.wall - 0.14,
-    yFloor: BOX.wall + 0.02
+    // just enough above the interior floor render to avoid exact coplanar
+    // contact — kept small so memories sit close to the bottom of the box
+    // rather than visibly floating above the floor
+    yFloor: BOX.wall + 0.006
   };
 
   /* ----------------------------- renderer / scene ------------------------ */
   const canvas = document.getElementById('scene');
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+  // logarithmic depth buffer: standard z-buffers lose precision fast at the
+  // far end of a wide near/far range, which was causing visible z-fighting
+  // (flickering/interleaved boundaries) between closely stacked memories —
+  // this fixes that without needing a bigger visual gap between cards
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, logarithmicDepthBuffer: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -54,7 +61,9 @@
   scene.background = new THREE.Color(0x0d0906);
   scene.fog = new THREE.FogExp2(0x0d0906, 0.055);
 
-  const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
+  // near/far kept as tight as the scene allows (camera never gets closer
+  // than 2.6 or needs to render past the fog) for the best depth precision
+  const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 40);
   // steep, bird's-eye-ish framing — like kneeling over the box looking down into it
   const CAM_START = new THREE.Vector3(0.15, 7.6, 3.7);
   const CAM_OPEN = new THREE.Vector3(0.1, 5.3, 2.35);
