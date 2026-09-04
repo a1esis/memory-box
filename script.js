@@ -756,7 +756,12 @@
       target.z = THREE.MathUtils.clamp(target.z, INTERIOR.zMin + dragUD.halfExtentZ, INTERIOR.zMax - dragUD.halfExtentZ);
       state.dragging.group.position.x = target.x;
       state.dragging.group.position.z = target.z;
-      state.dragging.group.position.y = state.dragging.group.userData.baseY + 0.05;
+      // hover height must track whatever is currently underneath the cursor,
+      // not the card's old resting height — otherwise dragging a card over a
+      // tall stack lets it visibly sink into that stack mid-drag, only
+      // correcting itself once dropped
+      const hoverFloor = landingY(target.x, target.z, dragUD.halfExtentX, dragUD.halfExtentZ, dragUD.baseScale, state.dragging);
+      state.dragging.group.position.y = hoverFloor + 0.05;
 
       if (state.pointerMoved) {
         trashZone.classList.add('show');
