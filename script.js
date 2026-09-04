@@ -20,7 +20,8 @@
     pointerMoved: false,
     muted: localStorage.getItem('memoryBoxMuted') === 'true',
     viewerOpen: false,
-    stackCount: 0
+    stackCount: 0,
+    overTrash: false
   };
 
   const BOX = {
@@ -285,14 +286,21 @@
   // during the open/close animation
   const trimT = 0.016;
   const wallH = bh - trimT;
+  // the floor block spans the box's full footprint, so walls must start
+  // ABOVE it (not at y=0) — otherwise each wall's bottom "wt" of height sits
+  // embedded inside the floor block's own volume (same full-footprint
+  // overlap bug as the trim/wall one above), which is what caused the
+  // flicker at the bottom front/back/side edges when viewed from an angle
+  const sideWallH = wallH - wt;
+  const sideWallY = wt + sideWallH / 2;
   // floor of the box
   baseGroup.add(wallPiece(bw, wt, bd, 0, wt / 2, 0, boxWoodMatDark));
   // front / back walls
-  baseGroup.add(wallPiece(bw, wallH, wt, 0, wallH / 2, -bd / 2 + wt / 2, boxWoodMat));
-  baseGroup.add(wallPiece(bw, wallH, wt, 0, wallH / 2, bd / 2 - wt / 2, boxWoodMat));
+  baseGroup.add(wallPiece(bw, sideWallH, wt, 0, sideWallY, -bd / 2 + wt / 2, boxWoodMat));
+  baseGroup.add(wallPiece(bw, sideWallH, wt, 0, sideWallY, bd / 2 - wt / 2, boxWoodMat));
   // left / right walls
-  baseGroup.add(wallPiece(wt, wallH, bd - wt * 2, -bw / 2 + wt / 2, wallH / 2, 0, boxWoodMat));
-  baseGroup.add(wallPiece(wt, wallH, bd - wt * 2, bw / 2 - wt / 2, wallH / 2, 0, boxWoodMat));
+  baseGroup.add(wallPiece(wt, sideWallH, bd - wt * 2, -bw / 2 + wt / 2, sideWallY, 0, boxWoodMat));
+  baseGroup.add(wallPiece(wt, sideWallH, bd - wt * 2, bw / 2 - wt / 2, sideWallY, 0, boxWoodMat));
 
   // interior floor tint (slightly lighter cavity floor visible through opening)
   const interiorFloor = new THREE.Mesh(
@@ -617,6 +625,20 @@
   /* ----------------------------- pointer interaction ------------------------ */
   const dom = renderer.domElement;
 
+  // trash target: shown only while actively dragging a memory, so a plain
+  // click-to-view never flashes it. Hit-testing uses screen-space rect,
+  // not raycasting, since it's a 2D UI element layered over the 3D scene.
+  const trashZone = document.getElementById('trash-zone');
+  const trashLabel = document.getElementById('trash-label');
+  const TRASH_HIT_PAD = 14;
+
+  function isPointOverTrash(x, y) {
+    const r = trashZone.getBoundingClientRect();
+    if (!r.width || !r.height) return false;
+    return x >= r.left - TRASH_HIT_PAD && x <= r.right + TRASH_HIT_PAD &&
+           y >= r.top - TRASH_HIT_PAD && y <= r.bottom + TRASH_HIT_PAD;
+  }
+
   function getIntersectableMemoryMeshes() {
     return state.memories.map(m => m.mesh);
   }
@@ -687,6 +709,17 @@
       state.dragging.group.position.x = target.x;
       state.dragging.group.position.z = target.z;
       state.dragging.group.position.y = state.dragging.group.userData.baseY + 0.05;
+
+      if (state.pointerMoved) {
+        trashZone.classList.add('show');
+        trashLabel.classList.add('show');
+        const overTrash = isPointOverTrash(e.clientX, e.clientY);
+        if (overTrash !== state.overTrash) {
+          state.overTrash = overTrash;
+          trashZone.classList.toggle('active', overTrash);
+        }
+        state.dragging.group.userData.overTrash = overTrash;
+      }
       return;
     }
 
@@ -711,6 +744,19 @@
 
     if (state.dragging) {
       const rec = state.dragging;
+      const droppedOnTrash = state.pointerMoved && state.overTrash;
+      trashZone.classList.remove('show', 'active');
+      trashLabel.classList.remove('show');
+      state.overTrash = false;
+      rec.group.userData.overTrash = false;
+
+      if (droppedOnTrash) {
+        state.dragging = null;
+        removeMemoryRecord(rec);
+        playPaperDrop();
+        return;
+      }
+
       rec.group.position.y = rec.group.userData.baseY;
       rec.transform.x = rec.group.position.x;
       rec.transform.z = rec.group.position.z;
@@ -734,7 +780,6 @@
   const viewerOverlay = document.getElementById('viewer-overlay');
   const viewerImage = document.getElementById('viewer-image');
   const viewerClose = document.getElementById('viewer-close');
-  const viewerDelete = document.getElementById('viewer-delete');
   let activeViewerRecord = null;
 
   function openMemoryViewer(rec) {
@@ -759,7 +804,7 @@
   }
 
   viewerOverlay.addEventListener('click', (e) => {
-    if (e.target === viewerClose || e.target === viewerDelete) return;
+    if (e.target === viewerClose) return;
     closeMemoryViewer();
   });
   viewerClose.addEventListener('click', (e) => { e.stopPropagation(); closeMemoryViewer(); });
@@ -776,26 +821,6 @@
     if (state.dragging === rec) state.dragging = null;
     if (rec.id) idbDeleteMemory(rec.id);
   }
-
-  function deleteActiveMemory() {
-    if (!activeViewerRecord) return;
-    const rec = activeViewerRecord;
-    activeViewerRecord = null;
-    removeMemoryRecord(rec);
-    viewerOverlay.classList.remove('open');
-    setTimeout(() => {
-      viewerOverlay.classList.add('hidden');
-      state.viewerOpen = false;
-    }, 420);
-  }
-
-  viewerDelete.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (!activeViewerRecord) return;
-    if (window.confirm("Remove this memory? This can't be undone.")) {
-      deleteActiveMemory();
-    }
-  });
 
   /* ----------------------------- add memory (upload) ------------------------ */
   const fileInput = document.getElementById('file-input');
@@ -1030,7 +1055,8 @@
     state.memories.forEach(rec => {
       const targetY = rec.group.userData.baseY + (rec.group.userData.lifted ? 0.045 : 0);
       rec.group.position.y += (targetY - rec.group.position.y) * Math.min(1, dt * 10);
-      const targetScale = rec.group.userData.baseScale * (rec.group.userData.lifted ? 1.04 : 1);
+      const scaleFactor = rec.group.userData.overTrash ? 0.55 : (rec.group.userData.lifted ? 1.04 : 1);
+      const targetScale = rec.group.userData.baseScale * scaleFactor;
       const s = rec.group.scale.x + (targetScale - rec.group.scale.x) * Math.min(1, dt * 10);
       rec.group.scale.setScalar(s);
     });
