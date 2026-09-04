@@ -37,10 +37,10 @@
     xMax: BOX.width / 2 - BOX.wall - 0.12,
     zMin: -BOX.depth / 2 + BOX.wall + 0.10,
     zMax: BOX.depth / 2 - BOX.wall - 0.14,
-    // just enough above the interior floor render to avoid exact coplanar
-    // contact — kept small so memories sit close to the bottom of the box
-    // rather than visibly floating above the floor
-    yFloor: BOX.wall + 0.006
+    // the interior floor mesh itself sits at BOX.wall + 0.001 — this stays
+    // just a hair above that (not exactly equal) to avoid literal coplanar
+    // z-fighting, while reading as flush/flat rather than floating
+    yFloor: BOX.wall + 0.0015
   };
 
   /* ----------------------------- renderer / scene ------------------------ */
