@@ -218,6 +218,26 @@ html, body {
 
 #viewer-overlay.open #viewer-close { opacity: 1; }
 
+#viewer-delete {
+  position: fixed;
+  left: 50%;
+  bottom: 74px;
+  transform: translateX(-50%) translateY(10px);
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.4s ease, background 0.25s ease, border-color 0.25s ease, transform 0.4s ease;
+}
+
+#viewer-delete:hover {
+  background: rgba(122, 40, 24, 0.55);
+  border-color: rgba(246, 241, 231, 0.5);
+}
+
+#viewer-overlay.open #viewer-delete {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
 #viewer-hint {
   position: fixed;
   bottom: 40px;

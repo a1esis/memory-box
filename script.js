@@ -176,12 +176,12 @@
   function floorTexture() {
     const c = makeCanvas(1024, 1024);
     const ctx = c.getContext('2d');
-    ctx.fillStyle = '#331f13';
+    ctx.fillStyle = '#2a170d';
     ctx.fillRect(0, 0, 1024, 1024);
     const plankW = 1024 / 8;
     for (let col = 0; col < 8; col++) {
       const shade = 14 + Math.random() * 20;
-      ctx.fillStyle = `rgb(${51 + shade * 0.4}, ${31 + shade * 0.25}, ${19 + shade * 0.15})`;
+      ctx.fillStyle = `rgb(${42 + shade * 0.4}, ${25 + shade * 0.25}, ${15 + shade * 0.15})`;
       ctx.fillRect(col * plankW, 0, plankW - 3, 1024);
       // horizontal board breaks
       let y = Math.random() * 120;
@@ -252,16 +252,16 @@
   scene.add(boxGroup);
 
   const boxWoodMat = new THREE.MeshStandardMaterial({
-    map: woodTexture({ base: '#8a6238', dark: '#5c3d20', light: '#b08a54', planks: 5 }),
+    map: woodTexture({ base: '#92693d', dark: '#604020', light: '#b9915a', planks: 5 }),
     roughness: 0.5, metalness: 0.06
   });
   const boxWoodMatDark = new THREE.MeshStandardMaterial({
-    map: woodTexture({ base: '#6e4b28', dark: '#4a2f17', light: '#957048', planks: 5 }),
+    map: woodTexture({ base: '#75512c', dark: '#4a2f17', light: '#9c764c', planks: 5 }),
     roughness: 0.58, metalness: 0.05
   });
   // a lighter, slightly worn tone for top-edge trim — implies decades of handling
   const boxTrimMat = new THREE.MeshStandardMaterial({
-    map: woodTexture({ base: '#a9835a', dark: '#7a5936', light: '#c7a273', planks: 3 }),
+    map: woodTexture({ base: '#b18a60', dark: '#7a5936', light: '#cea879', planks: 3 }),
     roughness: 0.42, metalness: 0.05
   });
 
@@ -278,14 +278,21 @@
   }
 
   const bw = BOX.width, bd = BOX.depth, bh = BOX.height, wt = BOX.wall;
+  // top-rim trim thickness — walls are built trimT shorter (below) so the
+  // trim strips sit flush on top of them instead of embedded inside them;
+  // embedding caused the trim's side faces to exactly coincide with the
+  // wall's own side faces (z-fighting), which flickered as the camera moved
+  // during the open/close animation
+  const trimT = 0.016;
+  const wallH = bh - trimT;
   // floor of the box
   baseGroup.add(wallPiece(bw, wt, bd, 0, wt / 2, 0, boxWoodMatDark));
   // front / back walls
-  baseGroup.add(wallPiece(bw, bh, wt, 0, bh / 2, -bd / 2 + wt / 2, boxWoodMat));
-  baseGroup.add(wallPiece(bw, bh, wt, 0, bh / 2, bd / 2 - wt / 2, boxWoodMat));
+  baseGroup.add(wallPiece(bw, wallH, wt, 0, wallH / 2, -bd / 2 + wt / 2, boxWoodMat));
+  baseGroup.add(wallPiece(bw, wallH, wt, 0, wallH / 2, bd / 2 - wt / 2, boxWoodMat));
   // left / right walls
-  baseGroup.add(wallPiece(wt, bh, bd - wt * 2, -bw / 2 + wt / 2, bh / 2, 0, boxWoodMat));
-  baseGroup.add(wallPiece(wt, bh, bd - wt * 2, bw / 2 - wt / 2, bh / 2, 0, boxWoodMat));
+  baseGroup.add(wallPiece(wt, wallH, bd - wt * 2, -bw / 2 + wt / 2, wallH / 2, 0, boxWoodMat));
+  baseGroup.add(wallPiece(wt, wallH, bd - wt * 2, bw / 2 - wt / 2, wallH / 2, 0, boxWoodMat));
 
   // interior floor tint (slightly lighter cavity floor visible through opening)
   const interiorFloor = new THREE.Mesh(
@@ -297,13 +304,16 @@
   interiorFloor.receiveShadow = true;
   baseGroup.add(interiorFloor);
 
-  // lid, hinged at the back edge
+  // lid, hinged at the true outer back edge (matches the hinge hardware
+  // position below) — the lid mesh spans forward from the pivot with no
+  // backward overhang, so it doesn't sweep through the back wall/trim
+  // geometry while rotating open, which was causing visible clipping
   const lidPivot = new THREE.Group();
-  lidPivot.position.set(0, bh, -bd / 2 + wt / 2);
+  lidPivot.position.set(0, bh, -bd / 2);
   boxGroup.add(lidPivot);
 
   const lidMesh = new THREE.Mesh(new THREE.BoxGeometry(bw, BOX.lidHeight, bd), boxWoodMat);
-  lidMesh.position.set(0, BOX.lidHeight / 2, bd / 2 - wt / 2);
+  lidMesh.position.set(0, BOX.lidHeight / 2, bd / 2);
   lidMesh.castShadow = true;
   lidMesh.receiveShadow = true;
   lidPivot.add(lidMesh);
@@ -311,7 +321,6 @@
   // worn top-rim trim — a slightly lighter cap along the top edge of each wall
   // (four thin strips, matching each wall's own footprint) so hands-worn
   // highlighting reads without sealing the opening the memories sit inside
-  const trimT = 0.016;
   const trimY = bh - trimT / 2;
   baseGroup.add(wallPiece(bw, trimT, wt, 0, trimY, -bd / 2 + wt / 2, boxTrimMat));
   baseGroup.add(wallPiece(bw, trimT, wt, 0, trimY, bd / 2 - wt / 2, boxTrimMat));
@@ -366,16 +375,17 @@
     boxGroup.add(corner);
   });
 
-  // soft grounded shadow shaped to the box footprint (not a circle) — keeps
-  // the box feeling physically present without a visible platform underneath
+  // soft grounded shadow hugging the box's actual rectangular footprint —
+  // tightly fitted and lightly feathered so it reads as a contact shadow,
+  // not a distinct circular/oval platform underneath the box
   const shadowTex = (() => {
-    const w = 512, h = Math.round(512 * (bd / bw) * 1.15);
+    const w = 512, h = Math.round(512 * (bd / bw));
     const c = makeCanvas(w, h);
     const ctx = c.getContext('2d');
-    ctx.filter = 'blur(28px)';
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    const pad = 60;
-    roundRect(ctx, pad, pad, w - pad * 2, h - pad * 2, 40);
+    ctx.filter = 'blur(10px)';
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    const pad = 22;
+    roundRect(ctx, pad, pad, w - pad * 2, h - pad * 2, 14);
     ctx.fill();
     return new THREE.CanvasTexture(c);
   })();
@@ -389,7 +399,7 @@
     ctx.closePath();
   }
   const contactShadow = new THREE.Mesh(
-    new THREE.PlaneGeometry(bw * 1.35, bd * 1.5),
+    new THREE.PlaneGeometry(bw * 1.08, bd * 1.1),
     new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })
   );
   contactShadow.rotation.x = -Math.PI / 2;
@@ -577,7 +587,6 @@
     }, () => {
       state.isAnimatingBox = false;
       state.boxOpen = true;
-      document.getElementById('close-btn').classList.remove('hidden');
       maybeShowGuide('add');
     });
   }
@@ -602,15 +611,8 @@
     }, () => {
       state.isAnimatingBox = false;
       state.boxOpen = false;
-      document.getElementById('close-btn').classList.add('hidden');
     });
   }
-
-  document.getElementById('close-btn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (state.viewerOpen) return;
-    closeBox();
-  });
 
   /* ----------------------------- pointer interaction ------------------------ */
   const dom = renderer.domElement;
@@ -732,6 +734,7 @@
   const viewerOverlay = document.getElementById('viewer-overlay');
   const viewerImage = document.getElementById('viewer-image');
   const viewerClose = document.getElementById('viewer-close');
+  const viewerDelete = document.getElementById('viewer-delete');
   let activeViewerRecord = null;
 
   function openMemoryViewer(rec) {
@@ -756,10 +759,43 @@
   }
 
   viewerOverlay.addEventListener('click', (e) => {
-    if (e.target === viewerClose) return;
+    if (e.target === viewerClose || e.target === viewerDelete) return;
     closeMemoryViewer();
   });
   viewerClose.addEventListener('click', (e) => { e.stopPropagation(); closeMemoryViewer(); });
+
+  /* ----------------------------- delete a memory ----------------------------- */
+  function removeMemoryRecord(rec) {
+    boxGroup.remove(rec.group);
+    rec.mesh.geometry.dispose();
+    const mats = Array.isArray(rec.mesh.material) ? rec.mesh.material : [rec.mesh.material];
+    mats.forEach(m => { if (m.map) m.map.dispose(); m.dispose(); });
+    const idx = state.memories.indexOf(rec);
+    if (idx !== -1) state.memories.splice(idx, 1);
+    if (state.hovered === rec) state.hovered = null;
+    if (state.dragging === rec) state.dragging = null;
+    if (rec.id) idbDeleteMemory(rec.id);
+  }
+
+  function deleteActiveMemory() {
+    if (!activeViewerRecord) return;
+    const rec = activeViewerRecord;
+    activeViewerRecord = null;
+    removeMemoryRecord(rec);
+    viewerOverlay.classList.remove('open');
+    setTimeout(() => {
+      viewerOverlay.classList.add('hidden');
+      state.viewerOpen = false;
+    }, 420);
+  }
+
+  viewerDelete.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!activeViewerRecord) return;
+    if (window.confirm("Remove this memory? This can't be undone.")) {
+      deleteActiveMemory();
+    }
+  });
 
   /* ----------------------------- add memory (upload) ------------------------ */
   const fileInput = document.getElementById('file-input');
@@ -884,14 +920,16 @@
       src.start();
     } catch (e) { /* audio unsupported, ignore */ }
   }
-  // soft, low, narrow-band "wood" creaks — quiet by design, no metallic high end
+  // soft, low, narrow-band "wood" creaks — very quiet and short by design,
+  // low cutoff frequencies only (no metallic high end), like a small hinge
+  // gently moving on an old wooden box rather than a dramatic cinematic creak
   function playLidOpenCreak() {
-    playBuffer({ duration: 0.5, filterFreq: 320, pitchFrom: 240, pitchTo: 380, filterType: 'bandpass', gain: 0.045 });
-    playBuffer({ duration: 0.22, filterFreq: 140, filterType: 'lowpass', gain: 0.035 });
+    playBuffer({ duration: 0.34, filterFreq: 280, pitchFrom: 220, pitchTo: 330, filterType: 'bandpass', gain: 0.02 });
+    playBuffer({ duration: 0.16, filterFreq: 130, filterType: 'lowpass', gain: 0.015 });
   }
   function playLidCloseCreak() {
-    playBuffer({ duration: 0.38, filterFreq: 300, pitchFrom: 360, pitchTo: 250, filterType: 'bandpass', gain: 0.04 });
-    playBuffer({ duration: 0.2, filterFreq: 130, filterType: 'lowpass', gain: 0.045 });
+    playBuffer({ duration: 0.26, filterFreq: 260, pitchFrom: 310, pitchTo: 220, filterType: 'bandpass', gain: 0.018 });
+    playBuffer({ duration: 0.14, filterFreq: 120, filterType: 'lowpass', gain: 0.02 });
   }
   function playPaperPickup() { playBuffer({ duration: 0.22, filterFreq: 2200, filterType: 'highpass', gain: 0.08 }); }
   function playPaperDrop() { playBuffer({ duration: 0.18, filterFreq: 1600, filterType: 'highpass', gain: 0.09 }); }
@@ -949,6 +987,14 @@
         const rec = getReq.result;
         if (rec) { rec.transform = transform; store.put(rec); }
       };
+    } catch (e) { /* ignore */ }
+  }
+
+  async function idbDeleteMemory(id) {
+    try {
+      const db = await getDB();
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).delete(id);
     } catch (e) { /* ignore */ }
   }
 
