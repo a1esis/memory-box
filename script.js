@@ -477,6 +477,36 @@
     return y;
   }
 
+  // a real pile of photos doesn't grow into an infinite tower — once it gets
+  // a few layers deep it starts spilling sideways instead. Cap how tall a
+  // stack is allowed to get at one exact spot; once a placement would land
+  // higher than that, nudge sideways by a few centimeters and try again
+  // (like a card sliding a bit off an unstable pile) until it finds room
+  // that isn't already stacked so high, instead of climbing forever
+  const MAX_STACK_HEIGHT = 0.08;
+  const NUDGE_ATTEMPTS = 8;
+
+  function resolvePlacement(x, z, ex, ez, vSpan, excludeRecord) {
+    let px = x, pz = z;
+    // the nudge has to clear the card's own footprint to actually escape the
+    // pile it's sliding off of — a nudge much smaller than the card itself
+    // just lands it slightly to one side of the SAME pile, still overlapping
+    // and still stacking upward. Growing the distance each attempt handles
+    // dense areas where a couple of hops aren't enough to find open floor.
+    const step = (ex + ez) * 0.7;
+    for (let attempt = 0; attempt < NUDGE_ATTEMPTS; attempt++) {
+      const y = landingY(px, pz, ex, ez, vSpan, excludeRecord);
+      if (y - (INTERIOR.yFloor + vSpan) <= MAX_STACK_HEIGHT) {
+        return { x: px, z: pz, y };
+      }
+      const angle = Math.random() * Math.PI * 2;
+      const nudge = step * (1 + attempt * 0.5) * (0.85 + Math.random() * 0.3);
+      px = THREE.MathUtils.clamp(x + Math.cos(angle) * nudge, INTERIOR.xMin + ex, INTERIOR.xMax - ex);
+      pz = THREE.MathUtils.clamp(z + Math.sin(angle) * nudge, INTERIOR.zMin + ez, INTERIOR.zMax - ez);
+    }
+    return { x: px, z: pz, y: landingY(px, pz, ex, ez, vSpan, excludeRecord) };
+  }
+
   function buildMemoryTexture(img, borderStyle) {
     const maxDim = 900;
     let iw = img.width, ih = img.height;
@@ -578,9 +608,12 @@
       // clipping through each other
       const { ex, ez } = cardHalfExtents(w, h, transform.rotY, transform.scale);
       const vSpan = cardVerticalHalfSpan(w, h, transform.rotX, transform.rotZ, transform.scale);
-      transform.x = THREE.MathUtils.clamp(transform.x, INTERIOR.xMin + ex, INTERIOR.xMax - ex);
-      transform.z = THREE.MathUtils.clamp(transform.z, INTERIOR.zMin + ez, INTERIOR.zMax - ez);
-      transform.y = landingY(transform.x, transform.z, ex, ez, vSpan, undefined);
+      const clampedX = THREE.MathUtils.clamp(transform.x, INTERIOR.xMin + ex, INTERIOR.xMax - ex);
+      const clampedZ = THREE.MathUtils.clamp(transform.z, INTERIOR.zMin + ez, INTERIOR.zMax - ez);
+      const placed = resolvePlacement(clampedX, clampedZ, ex, ez, vSpan, undefined);
+      transform.x = placed.x;
+      transform.z = placed.z;
+      transform.y = placed.y;
 
       const geo = new THREE.BoxGeometry(w, h, 0.012);
       const frontMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 });
@@ -826,12 +859,14 @@
       }
 
       const ud = rec.group.userData;
-      const newY = landingY(rec.group.position.x, rec.group.position.z, ud.halfExtentX, ud.halfExtentZ, ud.verticalHalfSpan, rec);
-      ud.baseY = newY;
-      rec.group.position.y = newY;
-      rec.transform.x = rec.group.position.x;
-      rec.transform.y = newY;
-      rec.transform.z = rec.group.position.z;
+      const placed = resolvePlacement(rec.group.position.x, rec.group.position.z, ud.halfExtentX, ud.halfExtentZ, ud.verticalHalfSpan, rec);
+      ud.baseY = placed.y;
+      rec.group.position.x = placed.x;
+      rec.group.position.y = placed.y;
+      rec.group.position.z = placed.z;
+      rec.transform.x = placed.x;
+      rec.transform.y = placed.y;
+      rec.transform.z = placed.z;
       playPaperDrop();
       const wasClick = !state.pointerMoved && (performance.now() - state.pointerDownTime) < 350;
       state.dragging = null;
