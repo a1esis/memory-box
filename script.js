@@ -472,18 +472,28 @@
     return { tex, aspect: cw / ch };
   }
 
+  // golden-angle step: an irrational fraction of a full turn, so stepping by
+  // it per upload spreads spins evenly around the circle without ever
+  // clustering — plain per-card uniform random can look "samey" for a small
+  // batch purely by chance, since a handful of independent draws don't
+  // reliably cover the full circle
+  const GOLDEN_ANGLE = 2.399963229728653;
+
   function randomTransform(index) {
     const margin = 0.05;
+    const baseSpin = index * GOLDEN_ANGLE;
+    const spinJitter = THREE.MathUtils.degToRad(THREE.MathUtils.randFloat(-35, 35));
+    const rotY = THREE.MathUtils.euclideanModulo(baseSpin + spinJitter + Math.PI, Math.PI * 2) - Math.PI;
     return {
       x: THREE.MathUtils.randFloat(INTERIOR.xMin + margin, INTERIOR.xMax - margin),
       z: THREE.MathUtils.randFloat(INTERIOR.zMin + margin, INTERIOR.zMax - margin),
       y: INTERIOR.yFloor + index * 0.0065 + Math.random() * 0.002,
       // spin around the vertical axis, like a photo casually tossed onto a surface
-      rotY: THREE.MathUtils.randFloat(-Math.PI, Math.PI),
-      // tiny natural tilt so it doesn't look perfectly flat/aligned
-      rotX: THREE.MathUtils.degToRad(THREE.MathUtils.randFloat(-2.5, 2.5)),
-      rotZ: THREE.MathUtils.degToRad(THREE.MathUtils.randFloat(-2.5, 2.5)),
-      scale: THREE.MathUtils.randFloat(0.88, 1.12)
+      rotY: rotY,
+      // natural tilt so cards don't all lie perfectly flat/aligned
+      rotX: THREE.MathUtils.degToRad(THREE.MathUtils.randFloat(-7, 7)),
+      rotZ: THREE.MathUtils.degToRad(THREE.MathUtils.randFloat(-7, 7)),
+      scale: THREE.MathUtils.randFloat(0.85, 1.15)
     };
   }
 
