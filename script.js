@@ -176,12 +176,12 @@
   function floorTexture() {
     const c = makeCanvas(1024, 1024);
     const ctx = c.getContext('2d');
-    ctx.fillStyle = '#4a2f1c';
+    ctx.fillStyle = '#331f13';
     ctx.fillRect(0, 0, 1024, 1024);
     const plankW = 1024 / 8;
     for (let col = 0; col < 8; col++) {
-      const shade = 18 + Math.random() * 24;
-      ctx.fillStyle = `rgb(${74 + shade * 0.4}, ${47 + shade * 0.25}, ${28 + shade * 0.15})`;
+      const shade = 14 + Math.random() * 20;
+      ctx.fillStyle = `rgb(${51 + shade * 0.4}, ${31 + shade * 0.25}, ${19 + shade * 0.15})`;
       ctx.fillRect(col * plankW, 0, plankW - 3, 1024);
       // horizontal board breaks
       let y = Math.random() * 120;
@@ -247,25 +247,22 @@
   wall.position.set(0, 5, -7);
   scene.add(wall);
 
-  // a soft rug ellipse under the box for coziness
-  const rugMat = new THREE.MeshStandardMaterial({ color: 0x6b2f2a, roughness: 1 });
-  const rug = new THREE.Mesh(new THREE.CircleGeometry(2.6, 40), rugMat);
-  rug.rotation.x = -Math.PI / 2;
-  rug.position.y = 0.002;
-  rug.receiveShadow = true;
-  scene.add(rug);
-
   /* ----------------------------- the memory box ---------------------------- */
   const boxGroup = new THREE.Group();
   scene.add(boxGroup);
 
   const boxWoodMat = new THREE.MeshStandardMaterial({
-    map: woodTexture({ base: '#4a2c17', dark: '#20120a', light: '#6b4022', planks: 5 }),
-    roughness: 0.55, metalness: 0.08
+    map: woodTexture({ base: '#8a6238', dark: '#5c3d20', light: '#b08a54', planks: 5 }),
+    roughness: 0.5, metalness: 0.06
   });
   const boxWoodMatDark = new THREE.MeshStandardMaterial({
-    map: woodTexture({ base: '#3a2210', dark: '#180d05', light: '#573419', planks: 5 }),
-    roughness: 0.6, metalness: 0.06
+    map: woodTexture({ base: '#6e4b28', dark: '#4a2f17', light: '#957048', planks: 5 }),
+    roughness: 0.58, metalness: 0.05
+  });
+  // a lighter, slightly worn tone for top-edge trim — implies decades of handling
+  const boxTrimMat = new THREE.MeshStandardMaterial({
+    map: woodTexture({ base: '#a9835a', dark: '#7a5936', light: '#c7a273', planks: 3 }),
+    roughness: 0.42, metalness: 0.05
   });
 
   // outer shell (base) — built as walls so the interior is a real cavity
@@ -293,7 +290,7 @@
   // interior floor tint (slightly lighter cavity floor visible through opening)
   const interiorFloor = new THREE.Mesh(
     new THREE.PlaneGeometry(bw - wt * 2, bd - wt * 2),
-    new THREE.MeshStandardMaterial({ map: woodTexture({ base: '#3a230f', dark: '#180c04', light: '#573416', planks: 3 }), roughness: 0.8 })
+    new THREE.MeshStandardMaterial({ map: woodTexture({ base: '#7c5936', dark: '#513a22', light: '#a17f52', planks: 3 }), roughness: 0.75 })
   );
   interiorFloor.rotation.x = -Math.PI / 2;
   interiorFloor.position.y = wt + 0.001;
@@ -311,34 +308,88 @@
   lidMesh.receiveShadow = true;
   lidPivot.add(lidMesh);
 
-  // little brass-ish latch + hinge details for character
-  const brassMat = new THREE.MeshStandardMaterial({ color: 0xb98a3f, roughness: 0.35, metalness: 0.75 });
-  const latch = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.1, 0.05), brassMat);
-  latch.position.set(0, bh + 0.02, bd / 2 - wt - 0.02);
-  latch.castShadow = true;
-  boxGroup.add(latch);
+  // worn top-rim trim — a slightly lighter cap along the top edge of each wall
+  // (four thin strips, matching each wall's own footprint) so hands-worn
+  // highlighting reads without sealing the opening the memories sit inside
+  const trimT = 0.016;
+  const trimY = bh - trimT / 2;
+  baseGroup.add(wallPiece(bw, trimT, wt, 0, trimY, -bd / 2 + wt / 2, boxTrimMat));
+  baseGroup.add(wallPiece(bw, trimT, wt, 0, trimY, bd / 2 - wt / 2, boxTrimMat));
+  baseGroup.add(wallPiece(wt, trimT, bd - wt * 2, -bw / 2 + wt / 2, trimY, 0, boxTrimMat));
+  baseGroup.add(wallPiece(wt, trimT, bd - wt * 2, bw / 2 - wt / 2, trimY, 0, boxTrimMat));
 
-  [-bw / 2 + 0.3, bw / 2 - 0.3].forEach(x => {
-    const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.16, 12), brassMat);
+  // aged brass / antique gold hardware — darker, less reflective than polished gold
+  const brassMat = new THREE.MeshStandardMaterial({ color: 0x8a6a3c, roughness: 0.55, metalness: 0.55 });
+  const brassDarkMat = new THREE.MeshStandardMaterial({ color: 0x5f4726, roughness: 0.65, metalness: 0.45 });
+
+  // front latch: a small escutcheon backplate with a raised clasp and a tiny pin,
+  // like an old jewelry-box catch rather than a modern hasp
+  const latchGroup = new THREE.Group();
+  const latchPlate = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.14, 0.012), brassDarkMat);
+  latchPlate.position.set(0, 0, 0);
+  latchGroup.add(latchPlate);
+  const latchClasp = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.03, 16), brassMat);
+  latchClasp.rotation.x = Math.PI / 2;
+  latchClasp.position.set(0, 0, 0.014);
+  latchGroup.add(latchClasp);
+  const latchPin = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 10), brassMat);
+  latchPin.position.set(0, -0.02, 0.02);
+  latchGroup.add(latchPin);
+  latchGroup.position.set(0, bh - 0.02, bd / 2 + 0.008);
+  latchGroup.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  boxGroup.add(latchGroup);
+
+  // hinges on the back edge
+  [-bw / 2 + 0.32, bw / 2 - 0.32].forEach(x => {
+    const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.18, 12), brassMat);
     hinge.rotation.z = Math.PI / 2;
-    hinge.position.set(x, bh, -bd / 2 + wt / 2);
+    hinge.position.set(x, bh, -bd / 2 - 0.006);
     hinge.castShadow = true;
     boxGroup.add(hinge);
+    const hingePlate = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.09, 0.012), brassDarkMat);
+    hingePlate.position.set(x, bh - 0.05, -bd / 2 - 0.004);
+    hingePlate.castShadow = true;
+    boxGroup.add(hingePlate);
   });
 
-  // gentle contact shadow blob under the box
+  // subtle brass corner accents on the top rim — small, understated, not shiny
+  const cornerPositions = [
+    [-bw / 2 + wt * 0.6, bd / 2 - wt * 0.6],
+    [bw / 2 - wt * 0.6, bd / 2 - wt * 0.6],
+    [-bw / 2 + wt * 0.6, -bd / 2 + wt * 0.6],
+    [bw / 2 - wt * 0.6, -bd / 2 + wt * 0.6]
+  ];
+  cornerPositions.forEach(([cx, cz]) => {
+    const corner = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.014, 0.09), brassMat);
+    corner.position.set(cx, bh - trimT - 0.006, cz);
+    corner.castShadow = true;
+    boxGroup.add(corner);
+  });
+
+  // soft grounded shadow shaped to the box footprint (not a circle) — keeps
+  // the box feeling physically present without a visible platform underneath
   const shadowTex = (() => {
-    const c = makeCanvas(256, 256);
+    const w = 512, h = Math.round(512 * (bd / bw) * 1.15);
+    const c = makeCanvas(w, h);
     const ctx = c.getContext('2d');
-    const grad = ctx.createRadialGradient(128, 128, 10, 128, 128, 128);
-    grad.addColorStop(0, 'rgba(0,0,0,0.55)');
-    grad.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 256, 256);
+    ctx.filter = 'blur(28px)';
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    const pad = 60;
+    roundRect(ctx, pad, pad, w - pad * 2, h - pad * 2, 40);
+    ctx.fill();
     return new THREE.CanvasTexture(c);
   })();
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
   const contactShadow = new THREE.Mesh(
-    new THREE.PlaneGeometry(bw * 2.1, bd * 2.4),
+    new THREE.PlaneGeometry(bw * 1.35, bd * 1.5),
     new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })
   );
   contactShadow.rotation.x = -Math.PI / 2;
@@ -409,13 +460,33 @@
       x: THREE.MathUtils.randFloat(INTERIOR.xMin + margin, INTERIOR.xMax - margin),
       z: THREE.MathUtils.randFloat(INTERIOR.zMin + margin, INTERIOR.zMax - margin),
       y: INTERIOR.yFloor + index * 0.0065 + Math.random() * 0.002,
-      rotX: THREE.MathUtils.degToRad(THREE.MathUtils.randFloat(-4, 4)),
-      rotZ: THREE.MathUtils.randFloat(-0.42, 0.42),
+      // spin around the vertical axis, like a photo casually tossed onto a surface
+      rotY: THREE.MathUtils.randFloat(-Math.PI, Math.PI),
+      // tiny natural tilt so it doesn't look perfectly flat/aligned
+      rotX: THREE.MathUtils.degToRad(THREE.MathUtils.randFloat(-2.5, 2.5)),
+      rotZ: THREE.MathUtils.degToRad(THREE.MathUtils.randFloat(-2.5, 2.5)),
       scale: THREE.MathUtils.randFloat(0.88, 1.12)
     };
   }
 
-  function createMemoryObject(imgSrc, transform, borderStyle, onReady) {
+  // older saved memories (from before memories lay flat) only have {rotX, rotZ}
+  // where rotZ was a big in-plane spin meant for a standing card. Reinterpret
+  // that as the new lying-flat spin so existing boxes still look natural.
+  function normalizeTransform(t) {
+    if (t && t.rotY === undefined) {
+      return {
+        x: t.x, y: t.y, z: t.z,
+        rotY: t.rotZ || 0,
+        rotX: 0,
+        rotZ: 0,
+        scale: t.scale
+      };
+    }
+    return t;
+  }
+
+  function createMemoryObject(imgSrc, rawTransform, borderStyle, onReady) {
+    const transform = normalizeTransform(rawTransform);
     const img = new Image();
     img.onload = () => {
       const { tex, aspect } = buildMemoryTexture(img, borderStyle);
@@ -433,11 +504,16 @@
       const mesh = new THREE.Mesh(geo, mats);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
+      // lay the card flat: its printed face (local +Z) is rotated to face up (+Y)
+      mesh.rotation.x = -Math.PI / 2;
 
       const group = new THREE.Group();
       group.add(mesh);
       group.position.set(transform.x, transform.y, transform.z);
-      group.rotation.set(transform.rotX, 0, transform.rotZ);
+      // group.rotation.y spins the flat card on the spot; x/z add a hair of
+      // natural tilt. Order matters so the flat lay-down always dominates.
+      group.rotation.order = 'YXZ';
+      group.rotation.set(transform.rotX, transform.rotY, transform.rotZ);
       group.scale.setScalar(transform.scale);
       group.userData.baseY = transform.y;
       group.userData.baseScale = transform.scale;
@@ -486,7 +562,7 @@
   function openBox() {
     if (state.boxOpen || state.isAnimatingBox) return;
     state.isAnimatingBox = true;
-    playCreak();
+    playLidOpenCreak();
     hideGuide();
 
     const camFrom = camera.position.clone();
@@ -509,12 +585,16 @@
   function closeBox() {
     if (!state.boxOpen || state.isAnimatingBox) return;
     state.isAnimatingBox = true;
-    playWoodThud();
+    state.__closeSoundPlayed = false;
 
     const camFrom = camera.position.clone();
     const targetFrom = controls.target.clone();
 
     animateValue(1000, (t) => {
+      if (t > 0.75 && !state.__closeSoundPlayed) {
+        state.__closeSoundPlayed = true;
+        playLidCloseCreak();
+      }
       lidPivot.rotation.x = -(1 - t) * (Math.PI * 0.62);
       camera.position.lerpVectors(camFrom, CAM_START, t);
       controls.target.lerpVectors(targetFrom, new THREE.Vector3(0, 0.35, 0), t);
@@ -553,11 +633,21 @@
     raycaster.setFromCamera(pointerNDC, camera);
 
     if (!state.boxOpen) {
+      // closed: clicking the lid (or the box body it's resting on) opens it
       const hitsLid = raycaster.intersectObject(lidMesh, true);
       const hitsBase = raycaster.intersectObjects(baseGroup.children, true);
       if (hitsLid.length || hitsBase.length) {
         openBox();
       }
+      return;
+    }
+
+    // open: clicking the lid closes it again. Checked before memories so a
+    // memory can never be mistaken for the lid, and the lid (now tipped back)
+    // never overlaps the memories lying flat in the box.
+    const hitsLidOpen = raycaster.intersectObject(lidMesh, true);
+    if (hitsLidOpen.length) {
+      closeBox();
       return;
     }
 
@@ -794,8 +884,15 @@
       src.start();
     } catch (e) { /* audio unsupported, ignore */ }
   }
-  function playCreak() { playBuffer({ duration: 0.9, filterFreq: 500, pitchFrom: 300, pitchTo: 800, filterType: 'bandpass', gain: 0.14 }); }
-  function playWoodThud() { playBuffer({ duration: 0.35, filterFreq: 180, filterType: 'lowpass', gain: 0.3 }); }
+  // soft, low, narrow-band "wood" creaks — quiet by design, no metallic high end
+  function playLidOpenCreak() {
+    playBuffer({ duration: 0.5, filterFreq: 320, pitchFrom: 240, pitchTo: 380, filterType: 'bandpass', gain: 0.045 });
+    playBuffer({ duration: 0.22, filterFreq: 140, filterType: 'lowpass', gain: 0.035 });
+  }
+  function playLidCloseCreak() {
+    playBuffer({ duration: 0.38, filterFreq: 300, pitchFrom: 360, pitchTo: 250, filterType: 'bandpass', gain: 0.04 });
+    playBuffer({ duration: 0.2, filterFreq: 130, filterType: 'lowpass', gain: 0.045 });
+  }
   function playPaperPickup() { playBuffer({ duration: 0.22, filterFreq: 2200, filterType: 'highpass', gain: 0.08 }); }
   function playPaperDrop() { playBuffer({ duration: 0.18, filterFreq: 1600, filterType: 'highpass', gain: 0.09 }); }
 

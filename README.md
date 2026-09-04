@@ -48,9 +48,9 @@ Each visitor's uploaded memories are saved locally in their own browser using In
 
 ## Interacting
 
-- Click the box to open it.
-- Click **+ Add Memory** to upload photos (or drag image files anywhere onto the page).
-- Click and drag a memory to rearrange it inside the box.
+- Click the lid to open the box. Click the lid again to close it.
+- Click **+ Add Memory** to upload photos (or drag image files anywhere onto the page) — they land flat inside the box, like real photos and letters tossed in.
+- Click and drag a memory to rearrange it; it stays lying flat while you move it.
 - Click a memory (without dragging) to look at it closely; click anywhere, or the ✕, to put it back.
-- Use the sound pill to mute/unmute the subtle wood and paper sounds.
-- Drag to orbit slightly and scroll/pinch to zoom, within a limited range that keeps the box centered.
+- Use the sound pill to mute/unmute the soft wooden creak and paper sounds.
+- Drag to orbit slightly and scroll/pinch to zoom, within a limited range that keeps the box centered from above.
