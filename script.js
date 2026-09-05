@@ -342,11 +342,14 @@
     const T0 = new THREE.Vector3(-hw1, height, -hd1), T1 = new THREE.Vector3(hw1, height, -hd1);
     const T2 = new THREE.Vector3(hw1, height, hd1), T3 = new THREE.Vector3(-hw1, height, hd1);
 
-    const positions = [], normals = [], uvs = [];
+    const positions = [], uvs = [];
+    // normals are NOT set by hand here — computeVertexNormals() below derives
+    // them straight from each triangle's actual winding, so lighting can
+    // never disagree with which way a face was wound (a hand-picked normal
+    // that didn't match its winding was exactly what caused faces to look
+    // wrongly lit from certain angles)
     function addQuad(p0, p1, p2, p3) {
-      const n = new THREE.Vector3().subVectors(p1, p0).cross(new THREE.Vector3().subVectors(p2, p0)).normalize();
       [p0, p1, p2, p0, p2, p3].forEach(p => positions.push(p.x, p.y, p.z));
-      for (let i = 0; i < 6; i++) normals.push(n.x, n.y, n.z);
       uvs.push(0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1);
     }
     addQuad(T0, T1, T2, T3); // top
@@ -358,8 +361,8 @@
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.computeVertexNormals();
     return geo;
   }
 
@@ -372,9 +375,16 @@
   boxGroup.add(lidPivot);
 
   const LID_BEVEL_INSET = 0.92; // top footprint as a fraction of the base
+  // double-sided so a hand-built face that happens to be wound "backwards"
+  // still renders (just from the correct, now-recomputed normal) instead of
+  // being invisible from some angles — which read as the lid clipping/
+  // glitching, since whatever sits behind it (the room, the box interior)
+  // showed through wherever a face was being culled
+  const lidWoodMat = boxWoodMat.clone();
+  lidWoodMat.side = THREE.DoubleSide;
   const lidMesh = new THREE.Mesh(
     makeFrustumGeometry(bw, bd, bw * LID_BEVEL_INSET, bd * LID_BEVEL_INSET, BOX.lidHeight),
-    boxWoodMat
+    lidWoodMat
   );
   lidMesh.position.set(0, 0, bd / 2);
   lidMesh.castShadow = true;
