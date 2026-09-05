@@ -548,8 +548,13 @@
   // exactly (it's not the same plane), so this reads worldX/worldY instead
   // of worldX/worldZ — a reasonable, consistently-scaled approximation
   // rather than a physically exact continuation.
-  const frontW = WIN_PANE_SIZE / WINDOW_LIGHT_PX_PER_UNIT * 1.5;
-  const frontH = Math.min(frontW, wallH * 0.94);
+  // sized and positioned strictly from the wall's own dimensions (not the
+  // floor pane's constants, which are unrelated to how wide/tall this
+  // particular face actually is) so it can never spill past the wall's
+  // real edges regardless of other window-light tuning
+  const frontW = bw * 0.4;
+  const frontH = Math.min(frontW, wallH * 0.8);
+  const frontCenterX = -bw * 0.18;
   const frontWindowLightTex = windowLightTex.clone();
   frontWindowLightTex.needsUpdate = true;
   frontWindowLightTex.repeat.set(frontW / WINDOW_LIGHT_WORLD_SCALE, frontH / WINDOW_LIGHT_WORLD_SCALE);
@@ -565,12 +570,12 @@
     new THREE.MeshBasicMaterial({
       map: frontWindowLightTex,
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.55,
       blending: THREE.AdditiveBlending,
       depthWrite: false
     })
   );
-  frontWindowLight.position.set(bw * 0.2, wallH * 0.52, bd / 2 + 0.01);
+  frontWindowLight.position.set(frontCenterX, wallH * 0.5, bd / 2 + 0.01);
   boxGroup.add(frontWindowLight);
 
   boxGroup.position.set(0, 0, 0);
