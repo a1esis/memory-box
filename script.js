@@ -521,7 +521,9 @@
   // Parented to the lid so it rides along with the opening animation, and
   // faded out once open (see animate()) since the lid then tilts to face a
   // different direction where the pattern would no longer make sense.
-  const lidW = bw * 0.95, lidD = bd * 0.95;
+  // full lid footprint, not shrunk — a smaller decal left an unlit border
+  // around the edge instead of the light reaching all the way across
+  const lidW = bw, lidD = bd;
   const lidWindowLightTex = windowLightTex.clone();
   lidWindowLightTex.needsUpdate = true;
   lidWindowLightTex.repeat.set(lidW / WINDOW_LIGHT_WORLD_SCALE, lidD / WINDOW_LIGHT_WORLD_SCALE);
@@ -542,29 +544,30 @@
   // used every frame to compute which slice of the floor pattern to show
   const lidWorldCenter = new THREE.Vector2(0, 0);
 
-  // same idea for the front wall (the latch side): a clone of the shared
-  // texture, so the light visibly reaches that face too and not just the
-  // floor and lid. A vertical surface can't share the floor's X/Z mapping
-  // exactly (it's not the same plane), so this reads worldX/worldY instead
-  // of worldX/worldZ — a reasonable, consistently-scaled approximation
-  // rather than a physically exact continuation.
-  // sized and positioned strictly from the wall's own dimensions (not the
+  // same idea for the front wall (the latch side): a warm pane so light
+  // visibly reaches that face too, not just the floor and lid. A vertical
+  // surface can't share the floor's X/Z mapping exactly (it's not the same
+  // plane), so rather than cropping the shared texture — which showed a
+  // hard-edged rectangle when the crop landed inside a pane's solid
+  // interior instead of reaching its blurred edge — this draws its own
+  // small dedicated texture, sized so the blur is guaranteed to fade to
+  // nothing well before the canvas (and therefore the decal's) edge.
+  // Sized and positioned strictly from the wall's own dimensions (not the
   // floor pane's constants, which are unrelated to how wide/tall this
   // particular face actually is) so it can never spill past the wall's
-  // real edges regardless of other window-light tuning
+  // real edges regardless of other window-light tuning.
   const frontW = bw * 0.4;
   const frontH = Math.min(frontW, wallH * 0.8);
   const frontCenterX = -bw * 0.18;
-  const frontWindowLightTex = windowLightTex.clone();
-  frontWindowLightTex.needsUpdate = true;
-  frontWindowLightTex.repeat.set(frontW / WINDOW_LIGHT_WORLD_SCALE, frontH / WINDOW_LIGHT_WORLD_SCALE);
-  // centered on one clean pane of the shared grid (top-left quadrant, at
-  // pixel (310, 391) in the source canvas), computed from the grid's own
-  // layout rather than picked by eye
-  frontWindowLightTex.offset.set(
-    310 / 1024 - frontWindowLightTex.repeat.x / 2,
-    (1 - 391 / 1024) - frontWindowLightTex.repeat.y / 2
-  );
+  const frontWindowLightTex = (() => {
+    const pw = Math.round(frontW * WINDOW_LIGHT_PX_PER_UNIT);
+    const ph = Math.round(frontH * WINDOW_LIGHT_PX_PER_UNIT);
+    const c = makeCanvas(pw, ph);
+    const ctx = c.getContext('2d');
+    ctx.filter = 'blur(16px)';
+    fillWindowPaneRect(ctx, pw * 0.14, ph * 0.14, pw * 0.72, ph * 0.72);
+    return new THREE.CanvasTexture(c);
+  })();
   const frontWindowLight = new THREE.Mesh(
     new THREE.PlaneGeometry(frontW, frontH),
     new THREE.MeshBasicMaterial({
