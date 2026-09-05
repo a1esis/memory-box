@@ -910,7 +910,15 @@
       transform.y = landingSpot(transform.x, transform.z, ex, ez, vSpan, stackClearance, undefined);
 
       const geo = new THREE.BoxGeometry(w, h, MEM_THICKNESS);
-      const frontMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 });
+      // a written note's texture is a real torn-edge cutout (transparent
+      // outside the ragged silhouette) — alphaTest discards those pixels so
+      // the card's actual visible shape matches the write-a-note overlay
+      // and the fullscreen viewer instead of showing as a plain rectangle
+      const frontMat = new THREE.MeshStandardMaterial(
+        borderStyle === 'note'
+          ? { map: tex, roughness: 0.85, alphaTest: 0.5 }
+          : { map: tex, roughness: 0.85 }
+      );
       const backMat = new THREE.MeshStandardMaterial({ map: backTex, roughness: 0.9 });
       const edgeMat = new THREE.MeshStandardMaterial({ color: 0xe9ddc4, roughness: 0.9 });
       // BoxGeometry material order: px, nx, py, ny, pz, nz
@@ -978,41 +986,53 @@
     }
   }
 
-  // a single jagged line traced across the top, right and bottom edges —
-  // the left stays straight, like the spiral-bound edge of a torn-out page
-  function drawNoteTornEdge(ctx, w, h) {
-    ctx.save();
-    ctx.strokeStyle = 'rgba(110,95,65,0.55)';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(0, 5);
+  // the torn silhouette as a fixed list of points — computed once and
+  // reused for both the clip mask and the visible frayed-edge stroke, so
+  // they always trace the exact same shape instead of two independent
+  // random paths that happen to look similar
+  function buildTornPoints(w, h) {
+    const pts = [[0, 5]];
     let x = 0;
     while (x < w) {
       x += 16 + Math.random() * 14;
-      ctx.lineTo(Math.min(x, w), 3 + Math.random() * 11);
+      pts.push([Math.min(x, w), 3 + Math.random() * 11]);
     }
-    let y = 6;
+    let y = pts[pts.length - 1][1];
     while (y < h) {
       y += 16 + Math.random() * 14;
-      ctx.lineTo(w - (3 + Math.random() * 11), Math.min(y, h));
+      pts.push([w - (3 + Math.random() * 11), Math.min(y, h)]);
     }
     x = w;
     while (x > 0) {
       x -= 16 + Math.random() * 14;
-      ctx.lineTo(Math.max(x, 0), h - (3 + Math.random() * 11));
+      pts.push([Math.max(x, 0), h - (3 + Math.random() * 11)]);
     }
-    ctx.lineTo(0, h - 5);
-    ctx.stroke();
-    ctx.restore();
+    pts.push([0, h - 5]);
+    return pts;
+  }
+  function tracePoints(ctx, pts) {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
   }
 
   // renders a handwritten note onto torn, ruled notebook paper and returns
   // it as a data URL, ready to drop into the box the same way an uploaded
-  // photo is
+  // photo is. The torn shape is a real cutout (everything outside it is
+  // left fully transparent) rather than a line drawn over a plain
+  // rectangle, so the card in the box and the fullscreen viewer show the
+  // same ragged silhouette as the write-a-note overlay instead of a
+  // rectangle with a squiggle near its edge.
   async function renderNoteToDataURL(text) {
     const W = 700, H = 900, marginX = 92, lineGap = 46, top = 150;
     const c = makeCanvas(W, H);
     const ctx = c.getContext('2d');
+    const tornPts = buildTornPoints(W, H);
+
+    ctx.save();
+    tracePoints(ctx, tornPts);
+    ctx.clip();
 
     ctx.fillStyle = '#e7dcbc';
     ctx.fillRect(0, 0, W, H);
@@ -1047,13 +1067,23 @@
       ctx.fill();
     }
 
-    drawNoteTornEdge(ctx, W, H);
-
     try { await document.fonts.load('40px Caveat'); } catch (e) { /* fall back to default font */ }
     ctx.fillStyle = '#3a3226';
     ctx.font = '40px Caveat, cursive';
     ctx.textBaseline = 'alphabetic';
     wrapNoteText(ctx, text.trim() || ' ', marginX + 26, top, W - marginX - 60, lineGap, H - 40);
+    ctx.restore();
+
+    // a frayed-fiber highlight right on the torn edge itself, still
+    // confined to the same shape it's tracing
+    ctx.save();
+    tracePoints(ctx, tornPts);
+    ctx.clip();
+    tracePoints(ctx, tornPts);
+    ctx.strokeStyle = 'rgba(110,95,65,0.6)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.restore();
 
     return c.toDataURL('image/png');
   }
