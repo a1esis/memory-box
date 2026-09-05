@@ -510,25 +510,21 @@
   windowLight.position.set(1.1, 0.002, 1.1);
   scene.add(windowLight);
 
-  // a dedicated texture for the lid, drawn at the SAME pixels-per-world-unit
-  // scale as the floor's — rather than cropping the floor's texture, which
-  // needs the crop window to land exactly on a pane with no easy way to
-  // guarantee that — so this always shows one clean, correctly-scaled pane
-  // regardless of the floor pattern's own layout. Parented to the lid so it
-  // rides along with the opening animation, and faded out once open (see
-  // animate()) since the lid then tilts to face a different direction
-  // where the pattern would no longer make sense.
+  // the lid decal samples the SAME shared texture as the floor, cropped to
+  // exactly the slice of the pattern that falls at the lid's real world
+  // position — a clone so its own repeat/offset don't disturb the floor's
+  // texture, but the underlying image (and therefore every pane's exact
+  // position and alignment) is identical, so the lid reads as a true
+  // continuation of the floor pattern rather than a separate light source.
+  // The offset is recomputed every frame (see animate()) to stay in sync
+  // as the floor pattern drifts, so the two never drift apart.
+  // Parented to the lid so it rides along with the opening animation, and
+  // faded out once open (see animate()) since the lid then tilts to face a
+  // different direction where the pattern would no longer make sense.
   const lidW = bw * 0.95, lidD = bd * 0.95;
-  const lidWindowLightTex = (() => {
-    const pw = Math.round(lidW * WINDOW_LIGHT_PX_PER_UNIT);
-    const ph = Math.round(lidD * WINDOW_LIGHT_PX_PER_UNIT);
-    const c = makeCanvas(pw, ph);
-    const ctx = c.getContext('2d');
-    ctx.filter = 'blur(14px)';
-    // same square size as one floor pane — not stretched to fit the lid
-    drawWindowPane(ctx, pw * 0.36, ph * 0.5, WIN_PANE_SIZE, WIN_PANE_SIZE, -14);
-    return new THREE.CanvasTexture(c);
-  })();
+  const lidWindowLightTex = windowLightTex.clone();
+  lidWindowLightTex.needsUpdate = true;
+  lidWindowLightTex.repeat.set(lidW / WINDOW_LIGHT_WORLD_SCALE, lidD / WINDOW_LIGHT_WORLD_SCALE);
   const lidWindowLight = new THREE.Mesh(
     new THREE.PlaneGeometry(lidW, lidD),
     new THREE.MeshBasicMaterial({
@@ -542,6 +538,40 @@
   lidWindowLight.rotation.x = -Math.PI / 2;
   lidWindowLight.position.y = BOX.lidHeight / 2 + 0.001;
   lidMesh.add(lidWindowLight);
+  // the lid's own world X/Z when closed (box is centered at the origin) —
+  // used every frame to compute which slice of the floor pattern to show
+  const lidWorldCenter = new THREE.Vector2(0, 0);
+
+  // same idea for the front wall (the latch side): a clone of the shared
+  // texture, so the light visibly reaches that face too and not just the
+  // floor and lid. A vertical surface can't share the floor's X/Z mapping
+  // exactly (it's not the same plane), so this reads worldX/worldY instead
+  // of worldX/worldZ — a reasonable, consistently-scaled approximation
+  // rather than a physically exact continuation.
+  const frontW = WIN_PANE_SIZE / WINDOW_LIGHT_PX_PER_UNIT * 1.5;
+  const frontH = Math.min(frontW, wallH * 0.94);
+  const frontWindowLightTex = windowLightTex.clone();
+  frontWindowLightTex.needsUpdate = true;
+  frontWindowLightTex.repeat.set(frontW / WINDOW_LIGHT_WORLD_SCALE, frontH / WINDOW_LIGHT_WORLD_SCALE);
+  // centered on one clean pane of the shared grid (top-left quadrant, at
+  // pixel (310, 391) in the source canvas), computed from the grid's own
+  // layout rather than picked by eye
+  frontWindowLightTex.offset.set(
+    310 / 1024 - frontWindowLightTex.repeat.x / 2,
+    (1 - 391 / 1024) - frontWindowLightTex.repeat.y / 2
+  );
+  const frontWindowLight = new THREE.Mesh(
+    new THREE.PlaneGeometry(frontW, frontH),
+    new THREE.MeshBasicMaterial({
+      map: frontWindowLightTex,
+      transparent: true,
+      opacity: 0.6,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  frontWindowLight.position.set(bw * 0.2, wallH * 0.52, bd / 2 + 0.01);
+  boxGroup.add(frontWindowLight);
 
   boxGroup.position.set(0, 0, 0);
 
@@ -1332,8 +1362,17 @@
     windowLight.position.x = 1.1 + Math.sin(t * 0.35) * 0.18;
     windowLight.position.z = 1.1 + Math.cos(t * 0.27) * 0.15;
     windowLight.material.opacity = 0.42 + Math.sin(t * 0.5) * 0.1;
+    // keep the lid sampling the exact same slice of the shared pattern that
+    // the floor is currently showing at the lid's own world position, so
+    // the two stay a single continuous pattern even as it drifts
+    const lidRepeat = lidWindowLightTex.repeat;
+    lidWindowLightTex.offset.set(
+      0.5 - lidRepeat.x / 2 + (lidWorldCenter.x - windowLight.position.x) / WINDOW_LIGHT_WORLD_SCALE,
+      0.5 - lidRepeat.y / 2 - (lidWorldCenter.y - windowLight.position.z) / WINDOW_LIGHT_WORLD_SCALE
+    );
     const lidLightTarget = state.boxOpen || state.isAnimatingBox ? 0 : 0.4 + Math.sin(t * 0.5) * 0.1;
     lidWindowLight.material.opacity += (lidLightTarget - lidWindowLight.material.opacity) * Math.min(1, dt * 4);
+    frontWindowLight.material.opacity = 0.55 + Math.sin(t * 0.5) * 0.1;
 
     controls.update();
     renderer.render(scene, camera);
