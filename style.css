@@ -479,7 +479,13 @@ html, body {
   font-family: 'Caveat', cursive;
   font-size: 28px;
   color: rgba(246,241,231,0.7);
+  /* hidden until the actual web font is confirmed loaded (see the inline
+     script by the loading screen) — otherwise the browser briefly shows
+     this in a fallback cursive font and then swaps to Caveat once it
+     arrives, which reads as the text's font changing right after boot */
+  visibility: hidden;
 }
+#loading-text.fonts-ready { visibility: visible; }
 
 #loading-screen.fade-out {
   opacity: 0;

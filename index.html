@@ -9,7 +9,7 @@
 <title>Memory Box</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Caveat:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=5" />
+<link rel="stylesheet" href="style.css?v=6" />
 </head>
 <body>
 
@@ -93,6 +93,22 @@
   <div id="loading-screen">
     <div id="loading-text">opening the room&hellip;</div>
   </div>
+
+  <!-- runs immediately, well before the heavier scripts below, so the
+       loading text stays hidden only as long as it actually needs to
+       while the real "Caveat" font finishes loading (see style.css) -->
+  <script>
+    (function () {
+      var el = document.getElementById('loading-text');
+      function reveal() { el.classList.add('fonts-ready'); }
+      if (document.fonts && document.fonts.load) {
+        document.fonts.load('28px Caveat').then(reveal).catch(reveal);
+        setTimeout(reveal, 600); // safety net if font loading stalls
+      } else {
+        reveal();
+      }
+    })();
+  </script>
 
   <script src="https://www.youtube.com/iframe_api"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
