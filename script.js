@@ -429,39 +429,53 @@
   // in the camera's view and risk looking like a stray floating frame.
   // Coplanar with the floor, so it reads correctly from every angle the
   // camera is allowed to orbit to.
+  // draws one warm, soft-edged "windowpane" of light. x/y/w/h are in the
+  // same pixels-per-world-unit scale for every canvas that calls this, so
+  // a pane always ends up the same absolute size regardless of which
+  // surface (floor or lid) its texture gets mapped onto
+  function drawWindowPane(ctx, x, y, w, h, rot) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(THREE.MathUtils.degToRad(rot));
+    const grad = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
+    grad.addColorStop(0, 'rgba(255,170,60,1)');
+    grad.addColorStop(0.55, 'rgba(255,110,30,0.85)');
+    grad.addColorStop(1, 'rgba(235,70,15,0.5)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(-w / 2, -h / 2, w, h);
+    ctx.restore();
+  }
+
+  // warm window light — a few soft, raking rectangular patches (like sun
+  // through window panes/blinds) laid over the floor and the lid as
+  // additive decals, rather than literal window geometry that would need
+  // to sit somewhere in the camera's view and risk looking like a stray
+  // floating frame. Coplanar with the surfaces they light, so they read
+  // correctly from every angle the camera is allowed to orbit to.
+  const WINDOW_LIGHT_PX_PER_UNIT = 150;
+
   const windowLightTex = (() => {
     const size = 1024;
     const c = makeCanvas(size, size);
     const ctx = c.getContext('2d');
-    const panes = [
+    ctx.filter = 'blur(18px)';
+    [
       { x: 300, y: 260, w: 300, h: 340, rot: -14 },
       { x: 620, y: 200, w: 260, h: 320, rot: -14 },
       { x: 220, y: 620, w: 280, h: 300, rot: -14 },
       { x: 560, y: 600, w: 300, h: 300, rot: -14 }
-    ];
-    ctx.filter = 'blur(18px)';
-    panes.forEach(p => {
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(THREE.MathUtils.degToRad(p.rot));
-      const grad = ctx.createLinearGradient(-p.w / 2, -p.h / 2, p.w / 2, p.h / 2);
-      grad.addColorStop(0, 'rgba(255,205,130,0.95)');
-      grad.addColorStop(0.55, 'rgba(255,160,80,0.75)');
-      grad.addColorStop(1, 'rgba(255,120,50,0.4)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-      ctx.restore();
-    });
+    ].forEach(p => drawWindowPane(ctx, p.x, p.y, p.w, p.h, p.rot));
     return new THREE.CanvasTexture(c);
   })();
   windowLightTex.wrapS = windowLightTex.wrapT = THREE.ClampToEdgeWrapping;
+  const WINDOW_LIGHT_WORLD_SCALE = 1024 / WINDOW_LIGHT_PX_PER_UNIT;
 
   const windowLight = new THREE.Mesh(
-    new THREE.PlaneGeometry(7, 7),
+    new THREE.PlaneGeometry(WINDOW_LIGHT_WORLD_SCALE, WINDOW_LIGHT_WORLD_SCALE),
     new THREE.MeshBasicMaterial({
       map: windowLightTex,
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.55,
       blending: THREE.AdditiveBlending,
       depthWrite: false
     })
@@ -472,17 +486,30 @@
   windowLight.position.set(1.1, 0.002, 1.1);
   scene.add(windowLight);
 
-  // the same pattern, scaled to the closed lid, so the box itself reads as
-  // sitting in that raking light rather than only the floor around it.
-  // Parented to the lid so it rides along with the opening animation, and
-  // faded out once open (see animate()) since the lid then tilts to face a
-  // different direction where the pattern would no longer make sense.
+  // a dedicated texture for the lid, drawn at the SAME pixels-per-world-unit
+  // scale as the floor's — rather than cropping the floor's texture, which
+  // needs the crop window to land exactly on a pane with no easy way to
+  // guarantee that — so this always shows one clean, correctly-scaled pane
+  // regardless of the floor pattern's own layout. Parented to the lid so it
+  // rides along with the opening animation, and faded out once open (see
+  // animate()) since the lid then tilts to face a different direction
+  // where the pattern would no longer make sense.
+  const lidW = bw * 0.95, lidD = bd * 0.95;
+  const lidWindowLightTex = (() => {
+    const pw = Math.round(lidW * WINDOW_LIGHT_PX_PER_UNIT);
+    const ph = Math.round(lidD * WINDOW_LIGHT_PX_PER_UNIT);
+    const c = makeCanvas(pw, ph);
+    const ctx = c.getContext('2d');
+    ctx.filter = 'blur(18px)';
+    drawWindowPane(ctx, pw * 0.38, ph * 0.5, pw * 0.62, ph * 1.3, -14);
+    return new THREE.CanvasTexture(c);
+  })();
   const lidWindowLight = new THREE.Mesh(
-    new THREE.PlaneGeometry(bw * 0.95, bd * 0.95),
+    new THREE.PlaneGeometry(lidW, lidD),
     new THREE.MeshBasicMaterial({
-      map: windowLightTex,
+      map: lidWindowLightTex,
       transparent: true,
-      opacity: 0.4,
+      opacity: 0.45,
       blending: THREE.AdditiveBlending,
       depthWrite: false
     })
