@@ -433,9 +433,9 @@
   // translated/rotated) canvas frame
   function fillWindowPaneRect(ctx, x, y, w, h) {
     const grad = ctx.createLinearGradient(x, y, x + w, y + h);
-    grad.addColorStop(0, 'rgba(255,140,35,1)');
-    grad.addColorStop(0.55, 'rgba(250,90,15,0.88)');
-    grad.addColorStop(1, 'rgba(215,55,10,0.55)');
+    grad.addColorStop(0, 'rgba(255,152,40,1)');
+    grad.addColorStop(0.5, 'rgba(255,100,20,0.94)');
+    grad.addColorStop(1, 'rgba(225,60,10,0.68)');
     ctx.fillStyle = grad;
     ctx.fillRect(x, y, w, h);
   }
@@ -461,15 +461,6 @@
     ctx.restore();
   }
 
-  // a single warm pane, for surfaces too small to show a full window grid
-  function drawWindowPane(ctx, x, y, w, h, rot) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(THREE.MathUtils.degToRad(rot));
-    fillWindowPaneRect(ctx, -w / 2, -h / 2, w, h);
-    ctx.restore();
-  }
-
   // warm window light — a few soft, raking rectangular patches (like sun
   // through window panes/blinds) laid over the floor and the lid as
   // additive decals, rather than literal window geometry that would need
@@ -487,7 +478,7 @@
     const size = 1024;
     const c = makeCanvas(size, size);
     const ctx = c.getContext('2d');
-    ctx.filter = 'blur(14px)';
+    ctx.filter = 'blur(7px)';
     drawWindowGrid(ctx, size / 2, size / 2, WIN_SIZE, WIN_SIZE, WIN_GAP, -14);
     return new THREE.CanvasTexture(c);
   })();
@@ -556,11 +547,11 @@
   // floor pane's constants, which are unrelated to how wide/tall this
   // particular face actually is) so it can never spill past the wall's
   // real edges regardless of other window-light tuning.
-  // an elongated streak on the SAME diagonal as the top pattern's mullion
-  // angle, rather than an axis-aligned rectangle — a plain vertical or
-  // horizontal patch reads as a disconnected shape when the light hitting
-  // the top is visibly raking at -14°, so this one is drawn at that same
-  // angle to look like a natural continuation of the same light.
+  // a real two-pane window shape (two rectangles split by a mullion gap),
+  // not a single blurred blob — a plain soft patch doesn't read as light
+  // through glass no matter how it's angled. Drawn at the SAME -14° raking
+  // angle as the top pattern's mullion so it reads as one continuous light
+  // source hitting both the top and this face, not an unrelated shape.
   const frontW = bw * 0.42;
   const frontH = wallH * 0.88;
   const frontCenterX = bw * 0.02;
@@ -569,8 +560,16 @@
     const ph = Math.round(frontH * WINDOW_LIGHT_PX_PER_UNIT);
     const c = makeCanvas(pw, ph);
     const ctx = c.getContext('2d');
-    ctx.filter = 'blur(16px)';
-    drawWindowPane(ctx, pw / 2, ph / 2, pw * 0.66, ph * 0.5, -14);
+    ctx.filter = 'blur(7px)';
+    const paneGap = ph * 0.07;
+    const paneW = pw * 0.3;
+    const paneH = ph * 0.78;
+    ctx.save();
+    ctx.translate(pw / 2, ph / 2);
+    ctx.rotate(THREE.MathUtils.degToRad(-14));
+    fillWindowPaneRect(ctx, -paneW - paneGap / 2, -paneH / 2, paneW, paneH);
+    fillWindowPaneRect(ctx, paneGap / 2, -paneH / 2, paneW, paneH);
+    ctx.restore();
     return new THREE.CanvasTexture(c);
   })();
   const frontWindowLight = new THREE.Mesh(
