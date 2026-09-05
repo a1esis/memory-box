@@ -1143,6 +1143,7 @@
     }, () => {
       state.isAnimatingBox = false;
       state.boxOpen = true;
+      playLidSettleClick();
       maybeShowGuide('add');
     });
   }
@@ -1167,6 +1168,7 @@
     }, () => {
       state.isAnimatingBox = false;
       state.boxOpen = false;
+      playLidSettleClick();
     });
   }
 
@@ -1513,6 +1515,13 @@
   function playLidCloseCreak() {
     playBuffer({ duration: 0.26, filterFreq: 260, pitchFrom: 310, pitchTo: 220, filterType: 'bandpass', gain: 0.018 });
     playBuffer({ duration: 0.14, filterFreq: 120, filterType: 'lowpass', gain: 0.02 });
+  }
+  // a soft settling click for the moment the lid actually finishes moving —
+  // reaching its fully-open rest position, or meeting the box body on the
+  // way shut — distinct from the creak, which plays while it's in motion
+  function playLidSettleClick() {
+    playBuffer({ duration: 0.045, filterFreq: 1500, filterType: 'bandpass', gain: 0.05 });
+    playBuffer({ duration: 0.05, filterFreq: 500, filterType: 'lowpass', gain: 0.025 });
   }
   function playPaperDrop() { playBuffer({ duration: 0.18, filterFreq: 1600, filterType: 'highpass', gain: 0.09 }); }
 
