@@ -1340,6 +1340,56 @@
   }
   function playPaperDrop() { playBuffer({ duration: 0.18, filterFreq: 1600, filterType: 'highpass', gain: 0.09 }); }
 
+  /* ----------------------------- background music (YouTube) --------------- */
+  // Plays the actual video through YouTube's own official embedded player
+  // (audio-only as far as the visitor can tell — the iframe is tucked off
+  // screen) rather than a locally-hosted copy of the audio, so this is
+  // controlling YouTube's playback, not redistributing the track itself.
+  const YT_MUSIC_VIDEO_ID = 'xeF5XQ8Lpio';
+  let ytPlayer = null;
+  let ytPlayerReady = false;
+
+  window.onYouTubeIframeAPIReady = function () {
+    ytPlayer = new YT.Player('yt-audio-player', {
+      width: '2',
+      height: '2',
+      videoId: YT_MUSIC_VIDEO_ID,
+      playerVars: {
+        autoplay: 1,
+        controls: 0,
+        disablekb: 1,
+        fs: 0,
+        loop: 1,
+        playlist: YT_MUSIC_VIDEO_ID, // required by YouTube for a single video to loop
+        playsinline: 1
+      },
+      events: {
+        onReady: (e) => {
+          ytPlayerReady = true;
+          e.target.setVolume(45);
+          if (!state.muted) e.target.playVideo();
+        }
+      }
+    });
+  };
+
+  // most browsers block autoplay WITH sound until the visitor has actually
+  // interacted with the page at least once — so alongside the autoplay
+  // attempt above (which silently fails in that case), the very first
+  // click/tap/keypress anywhere also starts the music if it's supposed to
+  // be playing but isn't yet, which is as close to "already playing on
+  // load" as browser autoplay policy allows
+  function ensureMusicPlaying() {
+    if (!ytPlayerReady || state.muted) return;
+    const s = ytPlayer.getPlayerState();
+    if (s !== YT.PlayerState.PLAYING && s !== YT.PlayerState.BUFFERING) {
+      ytPlayer.playVideo();
+    }
+  }
+  ['pointerdown', 'keydown'].forEach(evt => {
+    document.addEventListener(evt, ensureMusicPlaying, { passive: true });
+  });
+
   const soundBtn = document.getElementById('sound-btn');
   const soundIcon = document.getElementById('sound-icon');
   function refreshSoundIcon() { soundIcon.textContent = state.muted ? '✕' : '♪'; }
@@ -1348,6 +1398,10 @@
     state.muted = !state.muted;
     localStorage.setItem('memoryBoxMuted', String(state.muted));
     refreshSoundIcon();
+    if (ytPlayerReady) {
+      if (state.muted) ytPlayer.pauseVideo();
+      else ytPlayer.playVideo();
+    }
   });
 
   /* ----------------------------- share via Firebase (Firestore) --------------- */

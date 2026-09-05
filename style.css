@@ -26,6 +26,20 @@ html, body {
   inset: 0;
 }
 
+/* the YouTube background-music player is audio-only as far as the user is
+   concerned — kept in the document (not display:none) so the browser
+   still treats it as a real, playable embed, just visually tucked away */
+#yt-audio-wrap {
+  position: fixed;
+  width: 2px;
+  height: 2px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  bottom: 0;
+  right: 0;
+}
+
 #scene {
   display: block;
   width: 100%;
