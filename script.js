@@ -1129,6 +1129,7 @@
     if (state.boxOpen || state.isAnimatingBox) return;
     state.isAnimatingBox = true;
     playLidOpenCreak();
+    playLidSettleClick();
     hideGuide();
 
     const camFrom = camera.position.clone();
@@ -1143,7 +1144,6 @@
     }, () => {
       state.isAnimatingBox = false;
       state.boxOpen = true;
-      playLidSettleClick();
       maybeShowGuide('add');
     });
   }
