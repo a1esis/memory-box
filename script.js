@@ -556,8 +556,10 @@
   // floor pane's constants, which are unrelated to how wide/tall this
   // particular face actually is) so it can never spill past the wall's
   // real edges regardless of other window-light tuning.
-  const frontW = bw * 0.4;
-  const frontH = Math.min(frontW, wallH * 0.8);
+  // taller than wide — a proper raking shaft of light down the wall,
+  // like the reference photos, rather than a wide squat patch
+  const frontW = bw * 0.19;
+  const frontH = wallH * 0.95;
   const frontCenterX = -bw * 0.18;
   const frontWindowLightTex = (() => {
     const pw = Math.round(frontW * WINDOW_LIGHT_PX_PER_UNIT);
@@ -565,7 +567,7 @@
     const c = makeCanvas(pw, ph);
     const ctx = c.getContext('2d');
     ctx.filter = 'blur(16px)';
-    fillWindowPaneRect(ctx, pw * 0.14, ph * 0.14, pw * 0.72, ph * 0.72);
+    fillWindowPaneRect(ctx, pw * 0.09, ph * 0.06, pw * 0.82, ph * 0.88);
     return new THREE.CanvasTexture(c);
   })();
   const frontWindowLight = new THREE.Mesh(
