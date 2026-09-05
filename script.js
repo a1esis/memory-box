@@ -556,10 +556,13 @@
   // floor pane's constants, which are unrelated to how wide/tall this
   // particular face actually is) so it can never spill past the wall's
   // real edges regardless of other window-light tuning.
-  // taller than wide — a proper raking shaft of light down the wall,
-  // like the reference photos, rather than a wide squat patch
-  const frontW = bw * 0.19;
-  const frontH = wallH * 0.95;
+  // an elongated streak on the SAME diagonal as the top pattern's mullion
+  // angle, rather than an axis-aligned rectangle — a plain vertical or
+  // horizontal patch reads as a disconnected shape when the light hitting
+  // the top is visibly raking at -14°, so this one is drawn at that same
+  // angle to look like a natural continuation of the same light.
+  const frontW = bw * 0.34;
+  const frontH = wallH * 0.88;
   const frontCenterX = -bw * 0.18;
   const frontWindowLightTex = (() => {
     const pw = Math.round(frontW * WINDOW_LIGHT_PX_PER_UNIT);
@@ -567,7 +570,7 @@
     const c = makeCanvas(pw, ph);
     const ctx = c.getContext('2d');
     ctx.filter = 'blur(16px)';
-    fillWindowPaneRect(ctx, pw * 0.09, ph * 0.06, pw * 0.82, ph * 0.88);
+    drawWindowPane(ctx, pw / 2, ph / 2, pw * 0.66, ph * 0.5, -14);
     return new THREE.CanvasTexture(c);
   })();
   const frontWindowLight = new THREE.Mesh(
