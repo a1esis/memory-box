@@ -96,12 +96,16 @@
   const hemi = new THREE.HemisphereLight(0x5b4a3a, 0x1a120a, 0.55);
   scene.add(hemi);
 
-  const keyLight = new THREE.SpotLight(0xffd9a8, 2.2, 14, Math.PI / 5.2, 0.6, 1.4);
+  const keyLight = new THREE.SpotLight(0xffd9a8, 3.6, 14, Math.PI / 5.2, 0.6, 1.4);
   keyLight.position.set(2.1, 4.6, 2.4);
   keyLight.castShadow = true;
-  keyLight.shadow.mapSize.set(2048, 2048);
+  // high resolution so the fine window-mullion shadow (see the occluder
+  // below) keeps a soft-but-defined edge instead of smearing into a
+  // uniform haze — the same blur radius that looks fine on the box's own
+  // large shadow silhouette would otherwise blot out a thin bar entirely
+  keyLight.shadow.mapSize.set(4096, 4096);
   keyLight.shadow.bias = -0.0015;
-  keyLight.shadow.radius = 6;
+  keyLight.shadow.radius = 9;
   scene.add(keyLight);
   scene.add(keyLight.target);
   keyLight.target.position.set(0, 0.3, 0);
@@ -423,164 +427,70 @@
   contactShadow.position.y = 0.003;
   scene.add(contactShadow);
 
-  // warm window light — a few soft, raking rectangular patches (like sun
-  // through window panes/blinds) laid over the floor as an additive decal,
-  // rather than literal window geometry that would need to sit somewhere
-  // in the camera's view and risk looking like a stray floating frame.
-  // Coplanar with the floor, so it reads correctly from every angle the
-  // camera is allowed to orbit to.
-  // fills one axis-aligned warm pane rect in the current (already
-  // translated/rotated) canvas frame
-  function fillWindowPaneRect(ctx, x, y, w, h) {
-    const grad = ctx.createLinearGradient(x, y, x + w, y + h);
-    grad.addColorStop(0, 'rgba(255,152,40,1)');
-    grad.addColorStop(0.5, 'rgba(255,100,20,0.94)');
-    grad.addColorStop(1, 'rgba(225,60,10,0.68)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(x, y, w, h);
-  }
-
-  // draws a proper 2x2 window: one shared cross-shaped mullion dividing an
-  // overall rectangle into four EQUAL, ALIGNED panes, then rotated as one
-  // rigid piece — rather than four independently-sized/positioned patches,
-  // which don't read as a single real window no matter how they're placed.
-  // x/y/w/h/gap are in the same pixels-per-world-unit scale for every
-  // canvas that calls this, so panes end up the same absolute size
-  // regardless of which surface (floor or lid) the texture maps onto.
-  function drawWindowGrid(ctx, cx, cy, winW, winH, gap, rot) {
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(THREE.MathUtils.degToRad(rot));
-    const paneW = (winW - gap) / 2;
-    const paneH = (winH - gap) / 2;
-    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sy]) => {
-      const x = sx < 0 ? -gap / 2 - paneW : gap / 2;
-      const y = sy < 0 ? -gap / 2 - paneH : gap / 2;
-      fillWindowPaneRect(ctx, x, y, paneW, paneH);
-    });
-    ctx.restore();
-  }
-
-  // warm window light — a few soft, raking rectangular patches (like sun
-  // through window panes/blinds) laid over the floor and the lid as
-  // additive decals, rather than literal window geometry that would need
-  // to sit somewhere in the camera's view and risk looking like a stray
-  // floating frame. Coplanar with the surfaces they light, so they read
-  // correctly from every angle the camera is allowed to orbit to.
-  const WINDOW_LIGHT_PX_PER_UNIT = 150;
-  // shared by both the floor grid and the lid's single pane below, so the
-  // lid shows one pane at exactly the same square size as the floor's,
-  // instead of an independently-stretched rectangle that doesn't match
-  const WIN_SIZE = 620, WIN_GAP = 46;
-  const WIN_PANE_SIZE = (WIN_SIZE - WIN_GAP) / 2;
-
-  const windowLightTex = (() => {
-    const size = 1024;
+  // warm window light — instead of hand-painted decals faking where the
+  // sun falls, an invisible occluder (a window's mullion grid) sits between
+  // the key light and the box, and the renderer's own shadow map does the
+  // rest. That gets us, for free and for real: light only reaches surfaces
+  // that actually have a line of sight to the "window" (the lid, the
+  // memories, the box's own walls all correctly shadow each other and
+  // themselves as they move), soft physically-based penumbra instead of a
+  // hard decal edge, and a shape that never drifts out of sync with the
+  // light producing it because it IS the light. It's positioned once and
+  // never animated, so the pattern stays put rather than drifting.
+  const windowOccluderTex = (() => {
+    const size = 512;
     const c = makeCanvas(size, size);
     const ctx = c.getContext('2d');
-    ctx.filter = 'blur(7px)';
-    drawWindowGrid(ctx, size / 2, size / 2, WIN_SIZE, WIN_SIZE, WIN_GAP, -14);
+    // transparent = open pane, glass the light passes straight through
+    ctx.clearRect(0, 0, size, size);
+    // opaque = the frame/mullions, which block the light and cast the thin
+    // soft-edged divider shadow lines real windows leave on a lit surface —
+    // a real multi-pane grid (several columns/rows), not a single cross,
+    // since the occluder sits close enough to the box that one division
+    // would just bisect it into one big light/dark half each
+    ctx.fillStyle = '#000';
+    const cols = 3, rows = 2, bar = size * 0.02;
+    for (let i = 1; i < cols; i++) {
+      const x = (size / cols) * i;
+      ctx.fillRect(x - bar / 2, 0, bar, size);
+    }
+    for (let j = 1; j < rows; j++) {
+      const y = (size / rows) * j;
+      ctx.fillRect(0, y - bar / 2, size, bar);
+    }
     return new THREE.CanvasTexture(c);
   })();
-  windowLightTex.wrapS = windowLightTex.wrapT = THREE.ClampToEdgeWrapping;
-  const WINDOW_LIGHT_WORLD_SCALE = 1024 / WINDOW_LIGHT_PX_PER_UNIT;
-
-  const windowLight = new THREE.Mesh(
-    new THREE.PlaneGeometry(WINDOW_LIGHT_WORLD_SCALE, WINDOW_LIGHT_WORLD_SCALE),
+  const windowOccluder = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.0, 1.4),
     new THREE.MeshBasicMaterial({
-      map: windowLightTex,
-      transparent: true,
-      opacity: 0.55,
-      blending: THREE.AdditiveBlending,
+      map: windowOccluderTex,
+      alphaTest: 0.5,
+      side: THREE.DoubleSide,
+      // invisible to the camera — it exists only to shape the key light's
+      // own shadow map, not to be seen as a floating plane in the room
+      colorWrite: false,
       depthWrite: false
     })
   );
-  windowLight.rotation.x = -Math.PI / 2;
-  // offset toward the key light's forward direction so the warm patches
-  // read as light spilling past the box, not centered directly under it
-  windowLight.position.set(1.1, 0.002, 1.1);
-  scene.add(windowLight);
-
-  // the lid decal samples the SAME shared texture as the floor, cropped to
-  // exactly the slice of the pattern that falls at the lid's real world
-  // position — a clone so its own repeat/offset don't disturb the floor's
-  // texture, but the underlying image (and therefore every pane's exact
-  // position and alignment) is identical, so the lid reads as a true
-  // continuation of the floor pattern rather than a separate light source.
-  // The offset is recomputed every frame (see animate()) to stay in sync
-  // as the floor pattern drifts, so the two never drift apart.
-  // Parented to the lid so it rides along with the opening animation, and
-  // faded out once open (see animate()) since the lid then tilts to face a
-  // different direction where the pattern would no longer make sense.
-  // full lid footprint, not shrunk — a smaller decal left an unlit border
-  // around the edge instead of the light reaching all the way across
-  const lidW = bw, lidD = bd;
-  const lidWindowLightTex = windowLightTex.clone();
-  lidWindowLightTex.needsUpdate = true;
-  lidWindowLightTex.repeat.set(lidW / WINDOW_LIGHT_WORLD_SCALE, lidD / WINDOW_LIGHT_WORLD_SCALE);
-  const lidWindowLight = new THREE.Mesh(
-    new THREE.PlaneGeometry(lidW, lidD),
-    new THREE.MeshBasicMaterial({
-      map: lidWindowLightTex,
-      transparent: true,
-      opacity: 0.45,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    })
-  );
-  lidWindowLight.rotation.x = -Math.PI / 2;
-  lidWindowLight.position.y = BOX.lidHeight / 2 + 0.001;
-  lidMesh.add(lidWindowLight);
-  // the lid's own world X/Z when closed (box is centered at the origin) —
-  // used every frame to compute which slice of the floor pattern to show
-  const lidWorldCenter = new THREE.Vector2(0, 0);
-
-  // same idea for the front wall (the latch side): a warm pane so light
-  // visibly reaches that face too, not just the floor and lid. A vertical
-  // surface can't share the floor's X/Z mapping exactly (it's not the same
-  // plane), so rather than cropping the shared texture — which showed a
-  // hard-edged rectangle when the crop landed inside a pane's solid
-  // interior instead of reaching its blurred edge — this draws its own
-  // small dedicated texture, sized so the blur is guaranteed to fade to
-  // nothing well before the canvas (and therefore the decal's) edge.
-  // Sized and positioned strictly from the wall's own dimensions (not the
-  // floor pane's constants, which are unrelated to how wide/tall this
-  // particular face actually is) so it can never spill past the wall's
-  // real edges regardless of other window-light tuning.
-  // a single soft streak, NOT a two-pane window shape — a visible mullion
-  // split reads as its own separate little window on this face instead of
-  // a continuation of the same light patch hitting the top-left of the
-  // lid. Drawn at the SAME -14° raking angle as the top pattern so it
-  // reads as one continuous light source, just softer since it's a
-  // secondary graze rather than the primary patch.
-  const frontW = bw * 0.42;
-  const frontH = wallH * 0.88;
-  const frontCenterX = bw * 0.02;
-  const frontWindowLightTex = (() => {
-    const pw = Math.round(frontW * WINDOW_LIGHT_PX_PER_UNIT);
-    const ph = Math.round(frontH * WINDOW_LIGHT_PX_PER_UNIT);
-    const c = makeCanvas(pw, ph);
-    const ctx = c.getContext('2d');
-    ctx.filter = 'blur(16px)';
-    ctx.save();
-    ctx.translate(pw / 2, ph / 2);
-    ctx.rotate(THREE.MathUtils.degToRad(-14));
-    fillWindowPaneRect(ctx, -pw * 0.33, -ph * 0.25, pw * 0.66, ph * 0.5);
-    ctx.restore();
-    return new THREE.CanvasTexture(c);
-  })();
-  const frontWindowLight = new THREE.Mesh(
-    new THREE.PlaneGeometry(frontW, frontH),
-    new THREE.MeshBasicMaterial({
-      map: frontWindowLightTex,
-      transparent: true,
-      opacity: 0.55,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    })
-  );
-  frontWindowLight.position.set(frontCenterX, wallH * 0.5, bd / 2 + 0.01);
-  boxGroup.add(frontWindowLight);
+  windowOccluder.castShadow = true;
+  // three's automatic depth-material selection for shadow casting doesn't
+  // reliably pick up alphaTest cutouts on every material/version — an
+  // explicit customDepthMaterial is the documented, guaranteed way to get
+  // a cutout (rather than a solid rectangle) shadow
+  windowOccluder.customDepthMaterial = new THREE.MeshDepthMaterial({
+    depthPacking: THREE.RGBADepthPacking,
+    map: windowOccluderTex,
+    alphaTest: 0.5
+  });
+  // held flat, parallel to the box's own top (like a window mounted above
+  // it), and positioned along the key light's own ray toward the box's
+  // top-center — since a point light's shadow of a point ON that ray
+  // always lands exactly back on the point it was aimed at, this guarantees
+  // the grid centers itself on the box no matter how obliquely the light
+  // sits to one side, rather than landing off to one side unpredictably
+  windowOccluder.rotation.x = -Math.PI / 2;
+  windowOccluder.position.copy(keyLight.position).lerp(new THREE.Vector3(0, bh, 0), 0.55);
+  scene.add(windowOccluder);
 
   boxGroup.position.set(0, 0, 0);
 
@@ -1361,27 +1271,6 @@
       const s = rec.group.scale.x + (targetScale - rec.group.scale.x) * Math.min(1, dt * 10);
       rec.group.scale.setScalar(s);
     });
-
-    // gentle light flicker for coziness
-    const t = performance.now() * 0.0006;
-    keyLight.intensity = 2.15 + Math.sin(t * 1.7) * 0.06;
-
-    // warm window light drifts and breathes slowly, like sun moving through
-    // shifting clouds or leaves rather than a static decal
-    windowLight.position.x = 1.1 + Math.sin(t * 0.35) * 0.18;
-    windowLight.position.z = 1.1 + Math.cos(t * 0.27) * 0.15;
-    windowLight.material.opacity = 0.42 + Math.sin(t * 0.5) * 0.1;
-    // keep the lid sampling the exact same slice of the shared pattern that
-    // the floor is currently showing at the lid's own world position, so
-    // the two stay a single continuous pattern even as it drifts
-    const lidRepeat = lidWindowLightTex.repeat;
-    lidWindowLightTex.offset.set(
-      0.5 - lidRepeat.x / 2 + (lidWorldCenter.x - windowLight.position.x) / WINDOW_LIGHT_WORLD_SCALE,
-      0.5 - lidRepeat.y / 2 - (lidWorldCenter.y - windowLight.position.z) / WINDOW_LIGHT_WORLD_SCALE
-    );
-    const lidLightTarget = state.boxOpen || state.isAnimatingBox ? 0 : 0.4 + Math.sin(t * 0.5) * 0.1;
-    lidWindowLight.material.opacity += (lidLightTarget - lidWindowLight.material.opacity) * Math.min(1, dt * 4);
-    frontWindowLight.material.opacity = 0.55 + Math.sin(t * 0.5) * 0.1;
 
     controls.update();
     renderer.render(scene, camera);
