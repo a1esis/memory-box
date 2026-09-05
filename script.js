@@ -43,6 +43,13 @@
     yFloor: BOX.wall + 0.0015
   };
 
+  // small feet lift the box's visible silhouette off the ground, like a
+  // real jewelry box — the box itself (walls, interior floor, memory
+  // placement) all stay anchored at y=0 exactly as before; only the room
+  // floor and the few decorations tied to "ground level" drop by this much,
+  // so none of the box-interior math tuned earlier needs to change
+  const FOOT_H = 0.05;
+
   /* ----------------------------- renderer / scene ------------------------ */
   const canvas = document.getElementById('scene');
   // logarithmic depth buffer: standard z-buffers lose precision fast at the
@@ -248,6 +255,7 @@
   const floorMat = new THREE.MeshStandardMaterial({ map: floorTexture(), roughness: 0.42, metalness: 0.06 });
   const floor = new THREE.Mesh(new THREE.CircleGeometry(14, 48), floorMat);
   floor.rotation.x = -Math.PI / 2;
+  floor.position.y = -FOOT_H;
   floor.receiveShadow = true;
   scene.add(floor);
 
@@ -321,6 +329,40 @@
   interiorFloor.receiveShadow = true;
   baseGroup.add(interiorFloor);
 
+  // a truncated-pyramid (frustum) shape — flat top slightly smaller than
+  // the base, with 4 sloped side faces connecting them — for the lid's
+  // beveled silhouette (a plain box lid reads as flat/cheap; a shallow
+  // bevel down to the rim is what makes it look like a real jewelry box).
+  // Built by hand rather than with a bevel modifier since we only want the
+  // slope on all 4 sides between two rectangles, nothing fancier.
+  function makeFrustumGeometry(baseW, baseD, topW, topD, height) {
+    const hw0 = baseW / 2, hd0 = baseD / 2, hw1 = topW / 2, hd1 = topD / 2;
+    const B0 = new THREE.Vector3(-hw0, 0, -hd0), B1 = new THREE.Vector3(hw0, 0, -hd0);
+    const B2 = new THREE.Vector3(hw0, 0, hd0), B3 = new THREE.Vector3(-hw0, 0, hd0);
+    const T0 = new THREE.Vector3(-hw1, height, -hd1), T1 = new THREE.Vector3(hw1, height, -hd1);
+    const T2 = new THREE.Vector3(hw1, height, hd1), T3 = new THREE.Vector3(-hw1, height, hd1);
+
+    const positions = [], normals = [], uvs = [];
+    function addQuad(p0, p1, p2, p3) {
+      const n = new THREE.Vector3().subVectors(p1, p0).cross(new THREE.Vector3().subVectors(p2, p0)).normalize();
+      [p0, p1, p2, p0, p2, p3].forEach(p => positions.push(p.x, p.y, p.z));
+      for (let i = 0; i < 6; i++) normals.push(n.x, n.y, n.z);
+      uvs.push(0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1);
+    }
+    addQuad(T0, T1, T2, T3); // top
+    addQuad(B3, B2, B1, B0); // bottom
+    addQuad(B3, B2, T2, T3); // front (+Z)
+    addQuad(B1, B0, T0, T1); // back (-Z)
+    addQuad(B0, B3, T3, T0); // left (-X)
+    addQuad(B2, B1, T1, T2); // right (+X)
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    return geo;
+  }
+
   // lid, hinged at the true outer back edge (matches the hinge hardware
   // position below) — the lid mesh spans forward from the pivot with no
   // backward overhang, so it doesn't sweep through the back wall/trim
@@ -329,8 +371,12 @@
   lidPivot.position.set(0, bh, -bd / 2);
   boxGroup.add(lidPivot);
 
-  const lidMesh = new THREE.Mesh(new THREE.BoxGeometry(bw, BOX.lidHeight, bd), boxWoodMat);
-  lidMesh.position.set(0, BOX.lidHeight / 2, bd / 2);
+  const LID_BEVEL_INSET = 0.92; // top footprint as a fraction of the base
+  const lidMesh = new THREE.Mesh(
+    makeFrustumGeometry(bw, bd, bw * LID_BEVEL_INSET, bd * LID_BEVEL_INSET, BOX.lidHeight),
+    boxWoodMat
+  );
+  lidMesh.position.set(0, 0, bd / 2);
   lidMesh.castShadow = true;
   lidMesh.receiveShadow = true;
   lidPivot.add(lidMesh);
@@ -345,22 +391,42 @@
   baseGroup.add(wallPiece(wt, trimT, bd - wt * 2, bw / 2 - wt / 2, trimY, 0, boxTrimMat));
 
   // aged brass / antique gold hardware — darker, less reflective than polished gold
-  const brassMat = new THREE.MeshStandardMaterial({ color: 0x8a6a3c, roughness: 0.55, metalness: 0.55 });
-  const brassDarkMat = new THREE.MeshStandardMaterial({ color: 0x5f4726, roughness: 0.65, metalness: 0.45 });
+  // brighter, warmer gold rather than a dark bronze — closer to the antique
+  // gold hardware look, still with enough roughness to read as aged metal
+  const brassMat = new THREE.MeshStandardMaterial({ color: 0xc7a039, roughness: 0.4, metalness: 0.75 });
+  const brassDarkMat = new THREE.MeshStandardMaterial({ color: 0x8a6a2a, roughness: 0.5, metalness: 0.65 });
 
-  // front latch: a small escutcheon backplate with a raised clasp and a tiny pin,
-  // like an old jewelry-box catch rather than a modern hasp
+  // front latch: an ornate swing-hook clasp (an oval escutcheon straddling
+  // the lid/body seam, a hook arcing down from the lid side, and a knob on
+  // the body it catches over) rather than a plain button clasp
   const latchGroup = new THREE.Group();
-  const latchPlate = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.14, 0.012), brassDarkMat);
-  latchPlate.position.set(0, 0, 0);
+  const latchPlate = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.012, 24), brassDarkMat);
+  latchPlate.rotation.x = Math.PI / 2;
+  latchPlate.scale.set(1, 1.65, 1);
   latchGroup.add(latchPlate);
-  const latchClasp = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.03, 16), brassMat);
-  latchClasp.rotation.x = Math.PI / 2;
-  latchClasp.position.set(0, 0, 0.014);
-  latchGroup.add(latchClasp);
-  const latchPin = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 10), brassMat);
-  latchPin.position.set(0, -0.02, 0.02);
-  latchGroup.add(latchPin);
+
+  // a small raised bezel behind the hook's pivot, like a rivet/boss
+  const latchBoss = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.01, 16), brassMat);
+  latchBoss.rotation.x = Math.PI / 2;
+  latchBoss.position.set(0, 0.045, 0.012);
+  latchGroup.add(latchBoss);
+
+  // the hook — a partial ring pivoting near the top of the plate and
+  // arcing down to catch over the knob below, like a real hook-and-eye
+  // jewelry-box clasp instead of a modern hasp
+  const latchHook = new THREE.Mesh(
+    new THREE.TorusGeometry(0.042, 0.007, 8, 20, Math.PI * 1.35),
+    brassMat
+  );
+  latchHook.rotation.set(0, 0, Math.PI * 0.62);
+  latchHook.position.set(0, 0.008, 0.016);
+  latchGroup.add(latchHook);
+
+  // the knob the hook loops over, lower on the plate (on the box body side)
+  const latchKnob = new THREE.Mesh(new THREE.SphereGeometry(0.022, 14, 14), brassMat);
+  latchKnob.position.set(0, -0.05, 0.02);
+  latchGroup.add(latchKnob);
+
   latchGroup.position.set(0, bh - 0.02, bd / 2 + 0.008);
   latchGroup.traverse(o => { if (o.isMesh) o.castShadow = true; });
   boxGroup.add(latchGroup);
@@ -392,6 +458,24 @@
     boxGroup.add(corner);
   });
 
+  // small block feet at the base corners, lifting the box's silhouette off
+  // the ground — extend downward from the box's existing floor (y=0) into
+  // the gap created above (see FOOT_H), rather than moving the box itself
+  const FOOT_SIZE = 0.12;
+  const footPositions = [
+    [-bw / 2 + FOOT_SIZE * 0.75, -bd / 2 + FOOT_SIZE * 0.75],
+    [bw / 2 - FOOT_SIZE * 0.75, -bd / 2 + FOOT_SIZE * 0.75],
+    [-bw / 2 + FOOT_SIZE * 0.75, bd / 2 - FOOT_SIZE * 0.75],
+    [bw / 2 - FOOT_SIZE * 0.75, bd / 2 - FOOT_SIZE * 0.75]
+  ];
+  footPositions.forEach(([fx, fz]) => {
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(FOOT_SIZE, FOOT_H, FOOT_SIZE), boxWoodMatDark);
+    foot.position.set(fx, -FOOT_H / 2, fz);
+    foot.castShadow = true;
+    foot.receiveShadow = true;
+    baseGroup.add(foot);
+  });
+
   // soft grounded shadow hugging the box's actual rectangular footprint —
   // tightly fitted and lightly feathered so it reads as a contact shadow,
   // not a distinct circular/oval platform underneath the box
@@ -420,7 +504,7 @@
     new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })
   );
   contactShadow.rotation.x = -Math.PI / 2;
-  contactShadow.position.y = 0.003;
+  contactShadow.position.y = -FOOT_H + 0.003;
   scene.add(contactShadow);
 
   // warm window light — a few soft, raking rectangular patches (like sun
@@ -498,7 +582,7 @@
   windowLight.rotation.x = -Math.PI / 2;
   // offset toward the key light's forward direction so the warm patches
   // read as light spilling past the box, not centered directly under it
-  windowLight.position.set(1.1, 0.002, 1.1);
+  windowLight.position.set(1.1, -FOOT_H + 0.002, 1.1);
   scene.add(windowLight);
 
   // the lid decal samples the SAME shared texture as the floor, cropped to
@@ -512,9 +596,10 @@
   // Parented to the lid so it rides along with the opening animation, and
   // faded out once open (see animate()) since the lid then tilts to face a
   // different direction where the pattern would no longer make sense.
-  // full lid footprint, not shrunk — a smaller decal left an unlit border
-  // around the edge instead of the light reaching all the way across
-  const lidW = bw, lidD = bd;
+  // matches the lid's actual (now beveled, slightly inset) flat top
+  // footprint, not the full base footprint — a decal wider than the flat
+  // top would overhang past its edge and float over the sloped sides
+  const lidW = bw * LID_BEVEL_INSET, lidD = bd * LID_BEVEL_INSET;
   const lidWindowLightTex = windowLightTex.clone();
   lidWindowLightTex.needsUpdate = true;
   lidWindowLightTex.repeat.set(lidW / WINDOW_LIGHT_WORLD_SCALE, lidD / WINDOW_LIGHT_WORLD_SCALE);
@@ -529,7 +614,9 @@
     })
   );
   lidWindowLight.rotation.x = -Math.PI / 2;
-  lidWindowLight.position.y = BOX.lidHeight / 2 + 0.001;
+  // lidMesh's own origin is now its BASE (not its center — see the frustum
+  // geometry above), so its top face sits a full lidHeight above that
+  lidWindowLight.position.y = BOX.lidHeight + 0.001;
   lidMesh.add(lidWindowLight);
   // the lid's own world X/Z when closed (box is centered at the origin) —
   // used to compute which slice of the floor pattern to show. The window
