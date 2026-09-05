@@ -433,9 +433,9 @@
   // translated/rotated) canvas frame
   function fillWindowPaneRect(ctx, x, y, w, h) {
     const grad = ctx.createLinearGradient(x, y, x + w, y + h);
-    grad.addColorStop(0, 'rgba(255,170,60,1)');
-    grad.addColorStop(0.55, 'rgba(255,110,30,0.85)');
-    grad.addColorStop(1, 'rgba(235,70,15,0.5)');
+    grad.addColorStop(0, 'rgba(255,140,35,1)');
+    grad.addColorStop(0.55, 'rgba(250,90,15,0.88)');
+    grad.addColorStop(1, 'rgba(215,55,10,0.55)');
     ctx.fillStyle = grad;
     ctx.fillRect(x, y, w, h);
   }
@@ -477,13 +477,18 @@
   // floating frame. Coplanar with the surfaces they light, so they read
   // correctly from every angle the camera is allowed to orbit to.
   const WINDOW_LIGHT_PX_PER_UNIT = 150;
+  // shared by both the floor grid and the lid's single pane below, so the
+  // lid shows one pane at exactly the same square size as the floor's,
+  // instead of an independently-stretched rectangle that doesn't match
+  const WIN_SIZE = 620, WIN_GAP = 46;
+  const WIN_PANE_SIZE = (WIN_SIZE - WIN_GAP) / 2;
 
   const windowLightTex = (() => {
     const size = 1024;
     const c = makeCanvas(size, size);
     const ctx = c.getContext('2d');
     ctx.filter = 'blur(14px)';
-    drawWindowGrid(ctx, size / 2, size / 2, 620, 620, 46, -14);
+    drawWindowGrid(ctx, size / 2, size / 2, WIN_SIZE, WIN_SIZE, WIN_GAP, -14);
     return new THREE.CanvasTexture(c);
   })();
   windowLightTex.wrapS = windowLightTex.wrapT = THREE.ClampToEdgeWrapping;
@@ -519,8 +524,9 @@
     const ph = Math.round(lidD * WINDOW_LIGHT_PX_PER_UNIT);
     const c = makeCanvas(pw, ph);
     const ctx = c.getContext('2d');
-    ctx.filter = 'blur(18px)';
-    drawWindowPane(ctx, pw * 0.38, ph * 0.5, pw * 0.62, ph * 1.3, -14);
+    ctx.filter = 'blur(14px)';
+    // same square size as one floor pane — not stretched to fit the lid
+    drawWindowPane(ctx, pw * 0.36, ph * 0.5, WIN_PANE_SIZE, WIN_PANE_SIZE, -14);
     return new THREE.CanvasTexture(c);
   })();
   const lidWindowLight = new THREE.Mesh(
