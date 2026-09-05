@@ -547,11 +547,12 @@
   // floor pane's constants, which are unrelated to how wide/tall this
   // particular face actually is) so it can never spill past the wall's
   // real edges regardless of other window-light tuning.
-  // a real two-pane window shape (two rectangles split by a mullion gap),
-  // not a single blurred blob — a plain soft patch doesn't read as light
-  // through glass no matter how it's angled. Drawn at the SAME -14° raking
-  // angle as the top pattern's mullion so it reads as one continuous light
-  // source hitting both the top and this face, not an unrelated shape.
+  // a single soft streak, NOT a two-pane window shape — a visible mullion
+  // split reads as its own separate little window on this face instead of
+  // a continuation of the same light patch hitting the top-left of the
+  // lid. Drawn at the SAME -14° raking angle as the top pattern so it
+  // reads as one continuous light source, just softer since it's a
+  // secondary graze rather than the primary patch.
   const frontW = bw * 0.42;
   const frontH = wallH * 0.88;
   const frontCenterX = bw * 0.02;
@@ -560,15 +561,11 @@
     const ph = Math.round(frontH * WINDOW_LIGHT_PX_PER_UNIT);
     const c = makeCanvas(pw, ph);
     const ctx = c.getContext('2d');
-    ctx.filter = 'blur(7px)';
-    const paneGap = ph * 0.07;
-    const paneW = pw * 0.3;
-    const paneH = ph * 0.78;
+    ctx.filter = 'blur(16px)';
     ctx.save();
     ctx.translate(pw / 2, ph / 2);
     ctx.rotate(THREE.MathUtils.degToRad(-14));
-    fillWindowPaneRect(ctx, -paneW - paneGap / 2, -paneH / 2, paneW, paneH);
-    fillWindowPaneRect(ctx, paneGap / 2, -paneH / 2, paneW, paneH);
+    fillWindowPaneRect(ctx, -pw * 0.33, -ph * 0.25, pw * 0.66, ph * 0.5);
     ctx.restore();
     return new THREE.CanvasTexture(c);
   })();
