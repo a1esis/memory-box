@@ -561,9 +561,9 @@
   // horizontal patch reads as a disconnected shape when the light hitting
   // the top is visibly raking at -14°, so this one is drawn at that same
   // angle to look like a natural continuation of the same light.
-  const frontW = bw * 0.34;
+  const frontW = bw * 0.42;
   const frontH = wallH * 0.88;
-  const frontCenterX = -bw * 0.18;
+  const frontCenterX = bw * 0.02;
   const frontWindowLightTex = (() => {
     const pw = Math.round(frontW * WINDOW_LIGHT_PX_PER_UNIT);
     const ph = Math.round(frontH * WINDOW_LIGHT_PX_PER_UNIT);
