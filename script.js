@@ -406,38 +406,58 @@
   const brassMat = new THREE.MeshStandardMaterial({ color: 0xc7a039, roughness: 0.4, metalness: 0.75 });
   const brassDarkMat = new THREE.MeshStandardMaterial({ color: 0x8a6a2a, roughness: 0.5, metalness: 0.65 });
 
-  // front latch: an ornate swing-hook clasp (an oval escutcheon straddling
-  // the lid/body seam, a hook arcing down from the lid side, and a knob on
-  // the body it catches over) rather than a plain button clasp
+  // front latch: an ornate antique swing-hook clasp — a dark oval
+  // escutcheon behind everything, a small pivot rivet at the lid/body
+  // seam, a lobed shield-shaped medallion with a pierced center hanging
+  // from it, and a fixed horizontal prong on the body that the medallion's
+  // hole hooks over. Modeled after a real jewelry-box catch (reference
+  // photo) rather than a plain button clasp, and sized to actually read as
+  // hardware against the box's own height.
   const latchGroup = new THREE.Group();
-  const latchPlate = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.012, 24), brassDarkMat);
+
+  const latchPlate = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.01, 28), brassDarkMat);
   latchPlate.rotation.x = Math.PI / 2;
-  latchPlate.scale.set(1, 1.65, 1);
+  latchPlate.scale.set(1, 1.6, 1);
+  latchPlate.position.set(0, -0.05, -0.003);
   latchGroup.add(latchPlate);
 
-  // a small raised bezel behind the hook's pivot, like a rivet/boss
-  const latchBoss = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.01, 16), brassMat);
-  latchBoss.rotation.x = Math.PI / 2;
-  latchBoss.position.set(0, 0.045, 0.012);
-  latchGroup.add(latchBoss);
+  // the pivot rivet the medallion swings from, right at the lid's edge
+  const latchPivot = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.032, 12), brassMat);
+  latchPivot.position.set(0, 0.025, 0.013);
+  latchGroup.add(latchPivot);
 
-  // the hook — a partial ring pivoting near the top of the plate and
-  // arcing down to catch over the knob below, like a real hook-and-eye
-  // jewelry-box clasp instead of a modern hasp
-  const latchHook = new THREE.Mesh(
-    new THREE.TorusGeometry(0.042, 0.007, 8, 20, Math.PI * 1.35),
+  // a lobed shield outline with a pierced oval center — the ornate gold
+  // piece that does the visual work in a real antique hook clasp like this
+  function makeLatchMedallionShape() {
+    const s = new THREE.Shape();
+    s.moveTo(0, 0.08);
+    s.quadraticCurveTo(0.055, 0.068, 0.05, 0.017);
+    s.quadraticCurveTo(0.068, -0.022, 0.03, -0.068);
+    s.quadraticCurveTo(0, -0.095, -0.03, -0.068);
+    s.quadraticCurveTo(-0.068, -0.022, -0.05, 0.017);
+    s.quadraticCurveTo(-0.055, 0.068, 0, 0.08);
+    const hole = new THREE.Path();
+    hole.absellipse(0, -0.017, 0.022, 0.032, 0, Math.PI * 2, false, 0);
+    s.holes.push(hole);
+    return s;
+  }
+  const latchMedallion = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(makeLatchMedallionShape(), {
+      depth: 0.011, bevelEnabled: true, bevelThickness: 0.0035, bevelSize: 0.0035, bevelSegments: 2
+    }),
     brassMat
   );
-  latchHook.rotation.set(0, 0, Math.PI * 0.62);
-  latchHook.position.set(0, 0.008, 0.016);
-  latchGroup.add(latchHook);
+  latchMedallion.position.set(0, -0.04, 0.01);
+  latchGroup.add(latchMedallion);
 
-  // the knob the hook loops over, lower on the plate (on the box body side)
-  const latchKnob = new THREE.Mesh(new THREE.SphereGeometry(0.022, 14, 14), brassMat);
-  latchKnob.position.set(0, -0.05, 0.02);
-  latchGroup.add(latchKnob);
+  // the fixed prong on the box body that the medallion's pierced center
+  // hooks over, holding the lid shut
+  const latchCatch = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.08, 10), brassMat);
+  latchCatch.rotation.z = Math.PI / 2;
+  latchCatch.position.set(0, -0.057, 0.02);
+  latchGroup.add(latchCatch);
 
-  latchGroup.position.set(0, bh - 0.02, bd / 2 + 0.008);
+  latchGroup.position.set(0, bh, bd / 2 + 0.008);
   latchGroup.traverse(o => { if (o.isMesh) o.castShadow = true; });
   boxGroup.add(latchGroup);
 
