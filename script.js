@@ -986,29 +986,21 @@
     }
   }
 
-  // the torn silhouette as a fixed list of points — computed once and
-  // reused for both the clip mask and the visible frayed-edge stroke, so
-  // they always trace the exact same shape instead of two independent
-  // random paths that happen to look similar
+  // the EXACT same zigzag as the write-a-note overlay's CSS clip-path
+  // (percentage points, top edge then bottom edge, left side straight) —
+  // using a fresh random shape here instead, even if styled similarly,
+  // was exactly why the note's silhouette looked different once it left
+  // the overlay. Sharing one fixed shape guarantees the card and the
+  // fullscreen viewer trace the identical outline the overlay does.
+  const NOTE_TORN_POLYGON_PCT = [
+    [0, 3], [5, 1], [11, 4], [17, 0], [23, 3], [29, 1], [35, 4], [41, 0.5], [47, 3],
+    [53, 1], [59, 4], [65, 0], [71, 3], [77, 1], [83, 4], [89, 0.5], [95, 3], [100, 1],
+    [99, 8], [100, 96], [95, 98], [89, 95], [83, 99], [77, 96], [71, 99], [65, 95],
+    [59, 98], [53, 96], [47, 99], [41, 95], [35, 98], [29, 96], [23, 99], [17, 95],
+    [11, 98], [5, 96], [0, 99]
+  ];
   function buildTornPoints(w, h) {
-    const pts = [[0, 5]];
-    let x = 0;
-    while (x < w) {
-      x += 16 + Math.random() * 14;
-      pts.push([Math.min(x, w), 3 + Math.random() * 11]);
-    }
-    let y = pts[pts.length - 1][1];
-    while (y < h) {
-      y += 16 + Math.random() * 14;
-      pts.push([w - (3 + Math.random() * 11), Math.min(y, h)]);
-    }
-    x = w;
-    while (x > 0) {
-      x -= 16 + Math.random() * 14;
-      pts.push([Math.max(x, 0), h - (3 + Math.random() * 11)]);
-    }
-    pts.push([0, h - 5]);
-    return pts;
+    return NOTE_TORN_POLYGON_PCT.map(([px, py]) => [(px / 100) * w, (py / 100) * h]);
   }
   function tracePoints(ctx, pts) {
     ctx.beginPath();
