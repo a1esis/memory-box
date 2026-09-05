@@ -429,20 +429,44 @@
   // in the camera's view and risk looking like a stray floating frame.
   // Coplanar with the floor, so it reads correctly from every angle the
   // camera is allowed to orbit to.
-  // draws one warm, soft-edged "windowpane" of light. x/y/w/h are in the
-  // same pixels-per-world-unit scale for every canvas that calls this, so
-  // a pane always ends up the same absolute size regardless of which
-  // surface (floor or lid) its texture gets mapped onto
-  function drawWindowPane(ctx, x, y, w, h, rot) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(THREE.MathUtils.degToRad(rot));
-    const grad = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
+  // fills one axis-aligned warm pane rect in the current (already
+  // translated/rotated) canvas frame
+  function fillWindowPaneRect(ctx, x, y, w, h) {
+    const grad = ctx.createLinearGradient(x, y, x + w, y + h);
     grad.addColorStop(0, 'rgba(255,170,60,1)');
     grad.addColorStop(0.55, 'rgba(255,110,30,0.85)');
     grad.addColorStop(1, 'rgba(235,70,15,0.5)');
     ctx.fillStyle = grad;
-    ctx.fillRect(-w / 2, -h / 2, w, h);
+    ctx.fillRect(x, y, w, h);
+  }
+
+  // draws a proper 2x2 window: one shared cross-shaped mullion dividing an
+  // overall rectangle into four EQUAL, ALIGNED panes, then rotated as one
+  // rigid piece — rather than four independently-sized/positioned patches,
+  // which don't read as a single real window no matter how they're placed.
+  // x/y/w/h/gap are in the same pixels-per-world-unit scale for every
+  // canvas that calls this, so panes end up the same absolute size
+  // regardless of which surface (floor or lid) the texture maps onto.
+  function drawWindowGrid(ctx, cx, cy, winW, winH, gap, rot) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(THREE.MathUtils.degToRad(rot));
+    const paneW = (winW - gap) / 2;
+    const paneH = (winH - gap) / 2;
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sy]) => {
+      const x = sx < 0 ? -gap / 2 - paneW : gap / 2;
+      const y = sy < 0 ? -gap / 2 - paneH : gap / 2;
+      fillWindowPaneRect(ctx, x, y, paneW, paneH);
+    });
+    ctx.restore();
+  }
+
+  // a single warm pane, for surfaces too small to show a full window grid
+  function drawWindowPane(ctx, x, y, w, h, rot) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(THREE.MathUtils.degToRad(rot));
+    fillWindowPaneRect(ctx, -w / 2, -h / 2, w, h);
     ctx.restore();
   }
 
@@ -458,13 +482,8 @@
     const size = 1024;
     const c = makeCanvas(size, size);
     const ctx = c.getContext('2d');
-    ctx.filter = 'blur(18px)';
-    [
-      { x: 300, y: 260, w: 300, h: 340, rot: -14 },
-      { x: 620, y: 200, w: 260, h: 320, rot: -14 },
-      { x: 220, y: 620, w: 280, h: 300, rot: -14 },
-      { x: 560, y: 600, w: 300, h: 300, rot: -14 }
-    ].forEach(p => drawWindowPane(ctx, p.x, p.y, p.w, p.h, p.rot));
+    ctx.filter = 'blur(14px)';
+    drawWindowGrid(ctx, size / 2, size / 2, 620, 620, 46, -14);
     return new THREE.CanvasTexture(c);
   })();
   windowLightTex.wrapS = windowLightTex.wrapT = THREE.ClampToEdgeWrapping;
