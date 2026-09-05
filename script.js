@@ -439,7 +439,8 @@
 
   /* ----------------------------- memory objects ----------------------------- */
   const MEM_BASE_SIZE = 0.62; // longest edge in world units
-  const MEM_HALF_THICKNESS = 0.006; // half of the card geometry's 0.012 depth
+  const MEM_THICKNESS = 0.004; // real photos are thin; a chunkier card reads as a floating block
+  const MEM_HALF_THICKNESS = MEM_THICKNESS / 2;
   const STACK_GAP = 0.003; // small clearance between stacked cards so they never touch exactly
 
   // axis-aligned half-extents of a card's footprint once spun by rotY —
@@ -610,7 +611,7 @@
       transform.z = THREE.MathUtils.clamp(transform.z, INTERIOR.zMin + ez, INTERIOR.zMax - ez);
       transform.y = landingSpot(transform.x, transform.z, ex, ez, vSpan, stackClearance, undefined);
 
-      const geo = new THREE.BoxGeometry(w, h, 0.012);
+      const geo = new THREE.BoxGeometry(w, h, MEM_THICKNESS);
       const frontMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 });
       const backMat = new THREE.MeshStandardMaterial({ map: backTex, roughness: 0.9 });
       const edgeMat = new THREE.MeshStandardMaterial({ color: 0xe9ddc4, roughness: 0.9 });
@@ -888,12 +889,10 @@
     rec.mesh.visible = false;
     viewerOverlay.classList.remove('hidden');
     requestAnimationFrame(() => viewerOverlay.classList.add('open'));
-    playPaperPickup();
   }
 
   function closeMemoryViewer() {
     viewerOverlay.classList.remove('open');
-    playPaperDrop();
     setTimeout(() => {
       viewerOverlay.classList.add('hidden');
       if (activeViewerRecord) activeViewerRecord.mesh.visible = true;
@@ -1054,7 +1053,6 @@
     playBuffer({ duration: 0.26, filterFreq: 260, pitchFrom: 310, pitchTo: 220, filterType: 'bandpass', gain: 0.018 });
     playBuffer({ duration: 0.14, filterFreq: 120, filterType: 'lowpass', gain: 0.02 });
   }
-  function playPaperPickup() { playBuffer({ duration: 0.22, filterFreq: 2200, filterType: 'highpass', gain: 0.08 }); }
   function playPaperDrop() { playBuffer({ duration: 0.18, filterFreq: 1600, filterType: 'highpass', gain: 0.09 }); }
 
   const soundBtn = document.getElementById('sound-btn');
