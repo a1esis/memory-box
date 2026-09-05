@@ -423,6 +423,74 @@
   contactShadow.position.y = 0.003;
   scene.add(contactShadow);
 
+  // warm window light — a few soft, raking rectangular patches (like sun
+  // through window panes/blinds) laid over the floor as an additive decal,
+  // rather than literal window geometry that would need to sit somewhere
+  // in the camera's view and risk looking like a stray floating frame.
+  // Coplanar with the floor, so it reads correctly from every angle the
+  // camera is allowed to orbit to.
+  const windowLightTex = (() => {
+    const size = 1024;
+    const c = makeCanvas(size, size);
+    const ctx = c.getContext('2d');
+    const panes = [
+      { x: 300, y: 260, w: 300, h: 340, rot: -14 },
+      { x: 620, y: 200, w: 260, h: 320, rot: -14 },
+      { x: 220, y: 620, w: 280, h: 300, rot: -14 },
+      { x: 560, y: 600, w: 300, h: 300, rot: -14 }
+    ];
+    ctx.filter = 'blur(18px)';
+    panes.forEach(p => {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(THREE.MathUtils.degToRad(p.rot));
+      const grad = ctx.createLinearGradient(-p.w / 2, -p.h / 2, p.w / 2, p.h / 2);
+      grad.addColorStop(0, 'rgba(255,205,130,0.95)');
+      grad.addColorStop(0.55, 'rgba(255,160,80,0.75)');
+      grad.addColorStop(1, 'rgba(255,120,50,0.4)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    });
+    return new THREE.CanvasTexture(c);
+  })();
+  windowLightTex.wrapS = windowLightTex.wrapT = THREE.ClampToEdgeWrapping;
+
+  const windowLight = new THREE.Mesh(
+    new THREE.PlaneGeometry(7, 7),
+    new THREE.MeshBasicMaterial({
+      map: windowLightTex,
+      transparent: true,
+      opacity: 0.5,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  windowLight.rotation.x = -Math.PI / 2;
+  // offset toward the key light's forward direction so the warm patches
+  // read as light spilling past the box, not centered directly under it
+  windowLight.position.set(1.1, 0.002, 1.1);
+  scene.add(windowLight);
+
+  // the same pattern, scaled to the closed lid, so the box itself reads as
+  // sitting in that raking light rather than only the floor around it.
+  // Parented to the lid so it rides along with the opening animation, and
+  // faded out once open (see animate()) since the lid then tilts to face a
+  // different direction where the pattern would no longer make sense.
+  const lidWindowLight = new THREE.Mesh(
+    new THREE.PlaneGeometry(bw * 0.95, bd * 0.95),
+    new THREE.MeshBasicMaterial({
+      map: windowLightTex,
+      transparent: true,
+      opacity: 0.4,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  lidWindowLight.rotation.x = -Math.PI / 2;
+  lidWindowLight.position.y = BOX.lidHeight / 2 + 0.001;
+  lidMesh.add(lidWindowLight);
+
   boxGroup.position.set(0, 0, 0);
 
   /* ----------------------------- interaction helpers ----------------------- */
@@ -1206,6 +1274,14 @@
     // gentle light flicker for coziness
     const t = performance.now() * 0.0006;
     keyLight.intensity = 2.15 + Math.sin(t * 1.7) * 0.06;
+
+    // warm window light drifts and breathes slowly, like sun moving through
+    // shifting clouds or leaves rather than a static decal
+    windowLight.position.x = 1.1 + Math.sin(t * 0.35) * 0.18;
+    windowLight.position.z = 1.1 + Math.cos(t * 0.27) * 0.15;
+    windowLight.material.opacity = 0.42 + Math.sin(t * 0.5) * 0.1;
+    const lidLightTarget = state.boxOpen || state.isAnimatingBox ? 0 : 0.4 + Math.sin(t * 0.5) * 0.1;
+    lidWindowLight.material.opacity += (lidLightTarget - lidWindowLight.material.opacity) * Math.min(1, dt * 4);
 
     controls.update();
     renderer.render(scene, camera);
