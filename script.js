@@ -1342,6 +1342,11 @@
     state.viewerOpen = true;
     activeViewerRecord = rec;
     viewerImage.src = rec.imgSrc;
+    // the white print-mat border/shadow below is meant for photos — a note
+    // is already a complete torn-paper cutout with its own transparent
+    // background, so that framing would just paint a white rectangle
+    // around it instead of showing the same shape it has everywhere else
+    viewerImage.classList.toggle('viewer-image-note', rec.borderStyle === 'note');
     rec.mesh.visible = false;
     viewerOverlay.classList.remove('hidden');
     requestAnimationFrame(() => viewerOverlay.classList.add('open'));

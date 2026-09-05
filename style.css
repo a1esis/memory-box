@@ -214,6 +214,17 @@ html, body {
   box-shadow: 0 30px 70px rgba(0,0,0,0.65), 0 4px 14px rgba(0,0,0,0.4);
 }
 
+/* a written note is already a complete torn-paper image with its own
+   transparent background — the white print-mat border/shadow above is
+   for photos, and would otherwise paint a plain white rectangle right
+   over the note's own torn silhouette */
+#viewer-image.viewer-image-note {
+  border: none;
+  border-radius: 0;
+  box-shadow: 0 20px 55px rgba(0,0,0,0.55);
+  background: transparent;
+}
+
 #viewer-close {
   position: fixed;
   top: 28px;
