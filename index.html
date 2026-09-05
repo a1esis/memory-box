@@ -9,7 +9,7 @@
 <title>Memory Box</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Caveat:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=4" />
+<link rel="stylesheet" href="style.css?v=5" />
 </head>
 <body>
 
@@ -34,6 +34,7 @@
       <span id="sound-icon">♪</span>
     </button>
     <button id="add-btn" class="pill" title="Add a memory">+ Add Memory</button>
+    <button id="add-note-btn" class="pill" title="Write a note to keep in the box">+ Add Note</button>
     <button id="share-btn" class="pill" title="Generate a link to share this box">🔗 Share Box</button>
   </div>
 
@@ -53,6 +54,20 @@
 
   <!-- drop hint -->
   <div id="drag-hint" class="hidden">drop to add to the box</div>
+
+  <!-- write-a-note overlay -->
+  <div id="note-overlay" class="hidden">
+    <div id="note-paper">
+      <span class="note-hole"></span>
+      <span class="note-hole"></span>
+      <span class="note-hole"></span>
+      <span class="note-hole"></span>
+      <span class="note-hole"></span>
+      <textarea id="note-textarea" maxlength="420" placeholder="Write something worth keeping&hellip;"></textarea>
+    </div>
+    <button id="note-save-btn" class="pill">Add to box</button>
+    <button id="note-close" aria-label="Cancel">✕</button>
+  </div>
 
   <!-- share link overlay -->
   <div id="share-overlay" class="hidden">
@@ -85,6 +100,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js?v=3"></script>
-  <script src="script.js?v=33"></script>
+  <script src="script.js?v=34"></script>
 </body>
 </html>

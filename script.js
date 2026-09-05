@@ -791,6 +791,19 @@
   }
 
   function buildMemoryTexture(img, borderStyle) {
+    // a written note is already a fully-designed image (torn paper, ruled
+    // lines, the text) at the aspect ratio we want — wrapping it in the
+    // usual cream photo-print frame below would just double up on paper
+    // texture, so it's used as-is
+    if (borderStyle === 'note') {
+      const c = makeCanvas(img.width, img.height);
+      c.getContext('2d').drawImage(img, 0, 0);
+      const tex = new THREE.CanvasTexture(c);
+      tex.encoding = THREE.sRGBEncoding;
+      tex.anisotropy = 4;
+      return { tex, aspect: img.width / img.height };
+    }
+
     const maxDim = 900;
     let iw = img.width, ih = img.height;
     const scaleDown = Math.min(1, maxDim / Math.max(iw, ih));
@@ -938,6 +951,142 @@
     const style = borderStyle || (Math.random() > 0.55 ? 'polaroid' : 'plain');
     createMemoryObject(dataURL, transform, style);
   }
+
+  /* ----------------------------- written notes ------------------------------ */
+  // wraps text onto a canvas at a given max width, honoring the writer's
+  // own line breaks as paragraph breaks
+  function wrapNoteText(ctx, text, x, y, maxWidth, lineHeight, maxY) {
+    const paragraphs = text.split('\n');
+    let cy = y;
+    for (const paragraph of paragraphs) {
+      const words = paragraph.split(' ');
+      let line = '';
+      for (const word of words) {
+        const test = line ? line + ' ' + word : word;
+        if (line && ctx.measureText(test).width > maxWidth) {
+          ctx.fillText(line, x, cy);
+          cy += lineHeight;
+          line = word;
+          if (cy > maxY) return;
+        } else {
+          line = test;
+        }
+      }
+      ctx.fillText(line, x, cy);
+      cy += lineHeight;
+      if (cy > maxY) return;
+    }
+  }
+
+  // a single jagged line traced across the top, right and bottom edges —
+  // the left stays straight, like the spiral-bound edge of a torn-out page
+  function drawNoteTornEdge(ctx, w, h) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(110,95,65,0.55)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, 5);
+    let x = 0;
+    while (x < w) {
+      x += 16 + Math.random() * 14;
+      ctx.lineTo(Math.min(x, w), 3 + Math.random() * 11);
+    }
+    let y = 6;
+    while (y < h) {
+      y += 16 + Math.random() * 14;
+      ctx.lineTo(w - (3 + Math.random() * 11), Math.min(y, h));
+    }
+    x = w;
+    while (x > 0) {
+      x -= 16 + Math.random() * 14;
+      ctx.lineTo(Math.max(x, 0), h - (3 + Math.random() * 11));
+    }
+    ctx.lineTo(0, h - 5);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // renders a handwritten note onto torn, ruled notebook paper and returns
+  // it as a data URL, ready to drop into the box the same way an uploaded
+  // photo is
+  async function renderNoteToDataURL(text) {
+    const W = 700, H = 900, marginX = 92, lineGap = 46, top = 150;
+    const c = makeCanvas(W, H);
+    const ctx = c.getContext('2d');
+
+    ctx.fillStyle = '#e7dcbc';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 0.05;
+    for (let i = 0; i < 1400; i++) {
+      ctx.fillStyle = Math.random() > 0.5 ? '#000' : '#fff';
+      ctx.fillRect(Math.random() * W, Math.random() * H, 1, 1);
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.strokeStyle = 'rgba(70,65,90,0.28)';
+    ctx.lineWidth = 1.5;
+    for (let y = top - 20; y < H - 30; y += lineGap) {
+      ctx.beginPath();
+      ctx.moveTo(24, y);
+      ctx.lineTo(W - 24, y);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = 'rgba(178,72,72,0.5)';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(marginX, 16);
+    ctx.lineTo(marginX, H - 16);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(20,14,8,0.8)';
+    for (let i = 0; i < 6; i++) {
+      const hy = 70 + i * 135;
+      ctx.beginPath();
+      ctx.arc(48, hy, 15, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    drawNoteTornEdge(ctx, W, H);
+
+    try { await document.fonts.load('40px Caveat'); } catch (e) { /* fall back to default font */ }
+    ctx.fillStyle = '#3a3226';
+    ctx.font = '40px Caveat, cursive';
+    ctx.textBaseline = 'alphabetic';
+    wrapNoteText(ctx, text.trim() || ' ', marginX + 26, top, W - marginX - 60, lineGap, H - 40);
+
+    return c.toDataURL('image/png');
+  }
+
+  const noteOverlay = document.getElementById('note-overlay');
+  const noteTextarea = document.getElementById('note-textarea');
+  const addNoteBtn = document.getElementById('add-note-btn');
+  const noteSaveBtn = document.getElementById('note-save-btn');
+  const noteClose = document.getElementById('note-close');
+
+  function openNoteOverlay() {
+    noteTextarea.value = '';
+    noteOverlay.classList.remove('hidden');
+    setTimeout(() => noteTextarea.focus(), 50);
+  }
+  function closeNoteOverlay() { noteOverlay.classList.add('hidden'); }
+
+  addNoteBtn.addEventListener('click', () => {
+    if (!state.boxOpen) openBox();
+    openNoteOverlay();
+  });
+  noteClose.addEventListener('click', closeNoteOverlay);
+  noteOverlay.addEventListener('click', (e) => { if (e.target === noteOverlay) closeNoteOverlay(); });
+
+  noteSaveBtn.addEventListener('click', async () => {
+    const text = noteTextarea.value.trim();
+    if (!text) { noteTextarea.focus(); return; }
+    const dataURL = await renderNoteToDataURL(text);
+    addMemoryFromDataURL(dataURL, null, 'note');
+    closeNoteOverlay();
+    hideGuide();
+    maybeShowGuide('add');
+  });
 
   /* ----------------------------- box open/close animation ------------------ */
   function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
