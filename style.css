@@ -309,6 +309,71 @@ html, body {
 #viewer-overlay.open #viewer-hint { opacity: 1; }
 
 /* ---------- share link ---------- */
+#engrave-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 5, 3, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+#engrave-overlay.hidden { display: none; }
+
+#engrave-card {
+  background: rgba(28, 19, 12, 0.92);
+  border: 1px solid rgba(246, 241, 231, 0.22);
+  border-radius: 14px;
+  padding: 32px 36px;
+  max-width: 440px;
+  width: 88vw;
+  text-align: center;
+  box-shadow: 0 30px 70px rgba(0,0,0,0.6);
+}
+
+#engrave-title {
+  font-size: 22px;
+  letter-spacing: 0.02em;
+  color: var(--warm-white);
+  margin-bottom: 16px;
+}
+
+#engrave-input {
+  width: 100%;
+  font-family: 'Caveat', cursive;
+  font-size: 22px;
+  color: var(--warm-white);
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(246, 241, 231, 0.25);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+#engrave-input::placeholder { color: rgba(246, 241, 231, 0.4); font-family: 'Cormorant Garamond', serif; font-size: 15px; }
+
+#engrave-hint {
+  font-size: 13px;
+  color: rgba(246, 241, 231, 0.5);
+  margin-top: 14px;
+}
+
+#engrave-close {
+  position: fixed;
+  top: 28px;
+  right: 32px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(246,241,231,0.4);
+  background: rgba(35,24,15,0.4);
+  color: var(--warm-white);
+  font-size: 16px;
+  cursor: pointer;
+}
+
 #share-overlay {
   position: fixed;
   inset: 0;

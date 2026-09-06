@@ -190,7 +190,7 @@
     const tex = new THREE.CanvasTexture(c);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     tex.encoding = THREE.sRGBEncoding;
-    return tex;
+    return { tex, canvas: c, ctx };
   }
 
   function floorTexture() {
@@ -418,16 +418,16 @@
   scene.add(boxGroup);
 
   const boxWoodMat = new THREE.MeshStandardMaterial({
-    map: woodTexture({ base: '#92693d', dark: '#604020', light: '#b9915a', planks: 5 }),
+    map: woodTexture({ base: '#92693d', dark: '#604020', light: '#b9915a', planks: 5 }).tex,
     roughness: 0.5, metalness: 0.06
   });
   const boxWoodMatDark = new THREE.MeshStandardMaterial({
-    map: woodTexture({ base: '#75512c', dark: '#4a2f17', light: '#9c764c', planks: 5 }),
+    map: woodTexture({ base: '#75512c', dark: '#4a2f17', light: '#9c764c', planks: 5 }).tex,
     roughness: 0.58, metalness: 0.05
   });
   // a lighter, slightly worn tone for top-edge trim — implies decades of handling
   const boxTrimMat = new THREE.MeshStandardMaterial({
-    map: woodTexture({ base: '#b18a60', dark: '#7a5936', light: '#cea879', planks: 3 }),
+    map: woodTexture({ base: '#b18a60', dark: '#7a5936', light: '#cea879', planks: 3 }).tex,
     roughness: 0.42, metalness: 0.05
   });
 
@@ -470,7 +470,7 @@
   // interior floor tint (slightly lighter cavity floor visible through opening)
   const interiorFloor = new THREE.Mesh(
     new THREE.PlaneGeometry(bw - wt * 2, bd - wt * 2),
-    new THREE.MeshStandardMaterial({ map: woodTexture({ base: '#7c5936', dark: '#513a22', light: '#a17f52', planks: 3 }), roughness: 0.75 })
+    new THREE.MeshStandardMaterial({ map: woodTexture({ base: '#7c5936', dark: '#513a22', light: '#a17f52', planks: 3 }).tex, roughness: 0.75 })
   );
   interiorFloor.rotation.x = -Math.PI / 2;
   interiorFloor.position.y = wt + 0.001;
@@ -496,21 +496,29 @@
     // never disagree with which way a face was wound (a hand-picked normal
     // that didn't match its winding was exactly what caused faces to look
     // wrongly lit from certain angles)
+    // each face gets its own geometry group (materialIndex = call order),
+    // so the top can use a different material than the sides — needed so
+    // an engraving drawn on the top's texture doesn't also appear, tiled
+    // across the sloped side faces, which all share one plain wood texture
+    const groups = [];
     function addQuad(p0, p1, p2, p3) {
+      const start = positions.length / 3;
       [p0, p1, p2, p0, p2, p3].forEach(p => positions.push(p.x, p.y, p.z));
       uvs.push(0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1);
+      groups.push([start, 6, groups.length]);
     }
-    addQuad(T0, T1, T2, T3); // top
-    addQuad(B3, B2, B1, B0); // bottom
-    addQuad(B3, B2, T2, T3); // front (+Z)
-    addQuad(B1, B0, T0, T1); // back (-Z)
-    addQuad(B0, B3, T3, T0); // left (-X)
-    addQuad(B2, B1, T1, T2); // right (+X)
+    addQuad(T0, T1, T2, T3); // top    — group 0
+    addQuad(B3, B2, B1, B0); // bottom — group 1
+    addQuad(B3, B2, T2, T3); // front  — group 2
+    addQuad(B1, B0, T0, T1); // back   — group 3
+    addQuad(B0, B3, T3, T0); // left   — group 4
+    addQuad(B2, B1, T1, T2); // right  — group 5
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     geo.computeVertexNormals();
+    groups.forEach(([start, count, materialIndex]) => geo.addGroup(start, count, materialIndex));
     return geo;
   }
 
@@ -530,14 +538,61 @@
   // showed through wherever a face was being culled
   const lidWoodMat = boxWoodMat.clone();
   lidWoodMat.side = THREE.DoubleSide;
+
+  // the top face gets its OWN wood texture (same recipe as the rest of the
+  // box, but a separate canvas) rather than sharing boxWoodMat's — an
+  // engraving drawn on a shared texture would also show up, tiled, on
+  // every wall that reuses it. A pristine copy of the freshly-generated
+  // grain is kept so re-engraving (typing something new) always starts
+  // from clean wood instead of stacking text on top of old text.
+  const lidTopWood = woodTexture({ base: '#92693d', dark: '#604020', light: '#b9915a', planks: 5 });
+  const lidTopBasePixels = lidTopWood.ctx.getImageData(0, 0, lidTopWood.canvas.width, lidTopWood.canvas.height);
+  const lidTopMat = new THREE.MeshStandardMaterial({ map: lidTopWood.tex, roughness: 0.5, metalness: 0.06, side: THREE.DoubleSide });
+
   const lidMesh = new THREE.Mesh(
     makeFrustumGeometry(bw, bd, bw * LID_BEVEL_INSET, bd * LID_BEVEL_INSET, BOX.lidHeight),
-    lidWoodMat
+    [lidTopMat, lidWoodMat, lidWoodMat, lidWoodMat, lidWoodMat, lidWoodMat]
   );
   lidMesh.position.set(0, 0, bd / 2);
   lidMesh.castShadow = true;
   lidMesh.receiveShadow = true;
   lidPivot.add(lidMesh);
+
+  // renders (or clears, for an empty string) an engraving onto the lid's
+  // top face in the same cursive font used throughout the site. Text is
+  // drawn pre-squished horizontally by the lid's own width:depth ratio,
+  // since this square canvas maps onto a noticeably wider-than-deep
+  // rectangle — without that correction the lettering would come out
+  // visibly stretched sideways once mapped onto the real lid shape.
+  function renderLidEngraving(text) {
+    const ctx = lidTopWood.ctx;
+    const { width: W, height: H } = lidTopWood.canvas;
+    ctx.putImageData(lidTopBasePixels, 0, 0);
+    const trimmed = (text || '').trim();
+    if (trimmed) {
+      const fontSize = Math.min(64, Math.max(30, 620 / Math.max(trimmed.length, 6)));
+      ctx.save();
+      ctx.translate(W / 2, H / 2);
+      // confirmed empirically with color-coded corner markers: the top
+      // face's UV mapping flips vertically between the canvas and what
+      // the camera actually sees (top<->bottom), but preserves left-right
+      // — so only the vertical axis needs pre-flipping here to compensate
+      ctx.scale(bd / bw, -1);
+      ctx.font = `${fontSize}px Caveat, cursive`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      // a light offset highlight then a dark offset shadow then the main
+      // stroke, like light catching one edge of a carved groove
+      ctx.fillStyle = 'rgba(255,235,200,0.4)';
+      ctx.fillText(trimmed, -2, -2);
+      ctx.fillStyle = 'rgba(20,10,4,0.55)';
+      ctx.fillText(trimmed, 2, 2);
+      ctx.fillStyle = 'rgba(35,20,10,0.88)';
+      ctx.fillText(trimmed, 0, 0);
+      ctx.restore();
+    }
+    lidTopWood.tex.needsUpdate = true;
+  }
 
   // worn top-rim trim — a slightly lighter cap along the top edge of each wall
   // (four thin strips, matching each wall's own footprint) so hands-worn
@@ -1797,6 +1852,12 @@
   async function loadSharedBox(boxId) {
     if (!FIREBASE_READY) return;
     try {
+      const boxDoc = await db.collection('boxes').doc(boxId).get();
+      const boxData = boxDoc.data();
+      if (boxData && boxData.engraving) {
+        currentEngraving = boxData.engraving;
+        renderLidEngraving(currentEngraving);
+      }
       const snap = await db.collection('boxes').doc(boxId).collection('memories').orderBy('order').get();
       snap.forEach((doc) => {
         const data = doc.data();
@@ -1807,6 +1868,34 @@
       // shared box missing/unreachable — falls back to an empty box
     }
   }
+
+  /* ----------------------------- lid engraving ------------------------------ */
+  let currentEngraving = localStorage.getItem('memoryBoxEngraving') || '';
+  if (currentEngraving) renderLidEngraving(currentEngraving);
+
+  const engraveBtn = document.getElementById('engrave-btn');
+  const engraveOverlay = document.getElementById('engrave-overlay');
+  const engraveInput = document.getElementById('engrave-input');
+  const engraveSaveBtn = document.getElementById('engrave-save-btn');
+  const engraveClose = document.getElementById('engrave-close');
+
+  function openEngraveOverlay() {
+    engraveInput.value = currentEngraving;
+    engraveOverlay.classList.remove('hidden');
+    setTimeout(() => engraveInput.focus(), 50);
+  }
+  function closeEngraveOverlay() { engraveOverlay.classList.add('hidden'); }
+
+  engraveBtn.addEventListener('click', openEngraveOverlay);
+  engraveClose.addEventListener('click', closeEngraveOverlay);
+  engraveOverlay.addEventListener('click', (e) => { if (e.target === engraveOverlay) closeEngraveOverlay(); });
+  engraveInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') engraveSaveBtn.click(); });
+  engraveSaveBtn.addEventListener('click', () => {
+    currentEngraving = engraveInput.value.trim();
+    renderLidEngraving(currentEngraving);
+    localStorage.setItem('memoryBoxEngraving', currentEngraving);
+    closeEngraveOverlay();
+  });
 
   const shareBtn = document.getElementById('share-btn');
   const shareOverlay = document.getElementById('share-overlay');
@@ -1840,7 +1929,7 @@
 
     try {
       const boxRef = db.collection('boxes').doc();
-      await boxRef.set({ createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+      await boxRef.set({ createdAt: firebase.firestore.FieldValue.serverTimestamp(), engraving: currentEngraving });
 
       const memories = state.memories.slice();
       for (let i = 0; i < memories.length; i++) {
