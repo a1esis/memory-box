@@ -306,21 +306,25 @@
     // which layers different stitch patterns ring by ring
     ctx.globalCompositeOperation = 'destination-out';
 
-    // Ring 1 (just inside the picot edge): nested fan/shell ridges, like
-    // scallop-stitch crochet — wedges of concentric arcs with gaps between
-    const fanWedges = 21;
-    const fanOuter = R * 0.93;
-    const fanInner = R * 0.76;
-    for (let i = 0; i < fanWedges; i++) {
-      const a0 = (i / fanWedges) * Math.PI * 2;
-      const a1 = a0 + ((Math.PI * 2) / fanWedges) * 0.82;
-      for (let k = 0; k < 3; k++) {
-        const rr = fanInner + ((fanOuter - fanInner) * (k + 0.5)) / 3;
-        ctx.beginPath();
-        ctx.arc(cx, cy, rr, a0, a1);
-        ctx.lineWidth = ((fanOuter - fanInner) / 3) * 0.4;
-        ctx.stroke();
-      }
+    // Ring 1 (just inside the picot edge): a band of open diamond cutwork
+    // shapes, evenly spaced — reads as a cleaner, more classic lace
+    // border than a solid ridge band
+    const diaCount = 26;
+    const diaR = R * 0.85;
+    const diaW = R * 0.045, diaH = R * 0.1;
+    for (let i = 0; i < diaCount; i++) {
+      const a = (i / diaCount) * Math.PI * 2;
+      ctx.save();
+      ctx.translate(cx + Math.cos(a) * diaR, cy + Math.sin(a) * diaR);
+      ctx.rotate(a);
+      ctx.beginPath();
+      ctx.moveTo(0, -diaH);
+      ctx.lineTo(diaW, 0);
+      ctx.lineTo(0, diaH);
+      ctx.lineTo(-diaW, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
     }
 
     // Ring 2: a fine diamond mesh (net ground), the backdrop filet
@@ -342,7 +346,7 @@
     // small open flower motifs at intervals over the mesh, like the rose
     // shapes worked into a real filet-crochet doily
     const flowerR = R * 0.64;
-    const flowerCount = 8;
+    const flowerCount = 16;
     for (let i = 0; i < flowerCount; i++) {
       const a = (i / flowerCount) * Math.PI * 2;
       const fx = cx + Math.cos(a) * flowerR, fy = cy + Math.sin(a) * flowerR;
