@@ -281,7 +281,14 @@
     const c = makeCanvas(size, size);
     const ctx = c.getContext('2d');
     const cx = size / 2, cy = size / 2;
-    const R = size / 2 - 6;
+    // the picot bumps below extend outward past R by roughly R*0.035 (their
+    // own radius beyond the base circle) — R was too close to the canvas
+    // edge to fit that everywhere, so the 4 bumps nearest the canvas's own
+    // top/bottom/left/right edges (its closest points to the center, being
+    // square rather than round) were getting clipped flat by the canvas
+    // boundary. Pulled in enough that even a bump pointed straight at an
+    // edge stays fully inside it.
+    const R = size / 2 - 34;
 
     ctx.clearRect(0, 0, size, size);
     ctx.fillStyle = '#efe7d2';
