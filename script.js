@@ -1870,8 +1870,9 @@
   }
 
   /* ----------------------------- lid engraving ------------------------------ */
-  let currentEngraving = localStorage.getItem('memoryBoxEngraving') || '';
-  if (currentEngraving) renderLidEngraving(currentEngraving);
+  // never persisted locally — every fresh visit starts with a blank lid,
+  // same as memories, unless a share link restores one (see loadSharedBox)
+  let currentEngraving = '';
 
   const engraveBtn = document.getElementById('engrave-btn');
   const engraveOverlay = document.getElementById('engrave-overlay');
@@ -1893,7 +1894,6 @@
   engraveSaveBtn.addEventListener('click', () => {
     currentEngraving = engraveInput.value.trim();
     renderLidEngraving(currentEngraving);
-    localStorage.setItem('memoryBoxEngraving', currentEngraving);
     closeEngraveOverlay();
   });
 
