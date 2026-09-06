@@ -1074,7 +1074,11 @@
     ctx.fillStyle = '#3a3226';
     ctx.font = '40px Caveat, cursive';
     ctx.textBaseline = 'alphabetic';
-    wrapNoteText(ctx, text.trim() || ' ', marginX + 26, top, W - marginX - 60, lineGap, H - 40);
+    // matches the write-a-note textarea's own usable-width-to-font-size
+    // ratio (278px / 22px there) so a line wraps at roughly the same word
+    // here as it did while actually typing it, instead of a wider canvas
+    // line fitting extra words the writer never saw on that line
+    wrapNoteText(ctx, text.trim() || ' ', marginX + 26, top, W - marginX - 100, lineGap, H - 40);
     ctx.restore();
 
     // a frayed-fiber highlight right on the torn edge itself, still
@@ -1575,7 +1579,10 @@
   // click/tap/keypress anywhere also starts the music if it's supposed to
   // be playing but isn't yet, which is as close to "already playing on
   // load" as browser autoplay policy allows
-  function ensureMusicPlaying() {
+  function ensureMusicPlaying(e) {
+    // skip while typing (e.g. writing a note) — no reason for a keystroke
+    // in a text field to also be reaching into the YouTube player
+    if (e && e.type === 'keydown' && /^(TEXTAREA|INPUT)$/.test(e.target.tagName)) return;
     if (!ytPlayerReady || state.muted) return;
     const s = ytPlayer.getPlayerState();
     if (s !== YT.PlayerState.PLAYING && s !== YT.PlayerState.BUFFERING) {
