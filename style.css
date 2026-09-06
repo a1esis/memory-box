@@ -517,9 +517,24 @@ html, body {
   resize: none;
   background: transparent;
   font-family: 'Caveat', cursive;
+  /* the Google Fonts request only loads weights 500/600 — leaving this
+     unset defaulted to 400, a weight that was never actually downloaded,
+     so the browser was left guessing at a substitute on the fly rather
+     than using the one real weight it already has */
+  font-weight: 500;
   font-size: 22px;
   line-height: 38px;
   color: #3a3226;
+  /* Caveat (like a lot of "natural handwriting" fonts) cycles through a
+     few alternate shapes for common letters so repeated letters don't
+     look mechanically identical — via the same OpenType contextual-
+     alternate machinery browsers also use for ligatures. That's what was
+     actually being seen as "the font changes": the same "k" rendered as
+     a genuinely different (but still valid, still Caveat) glyph each
+     time. Turning these features off keeps one consistent glyph per
+     letter throughout.  */
+  font-variant-ligatures: none;
+  font-feature-settings: "calt" 0, "liga" 0, "dlig" 0, "hlig" 0, "rand" 0, "rclt" 0;
 }
 #note-textarea::placeholder { color: rgba(58,50,38,0.5); }
 

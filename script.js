@@ -1228,7 +1228,14 @@
   // same ragged silhouette as the write-a-note overlay instead of a
   // rectangle with a squiggle near its edge.
   async function renderNoteToDataURL(text) {
-    const W = 700, H = 900, marginX = 92, lineGap = 46, top = 150;
+    // lineGap matches the write-a-note textarea's own line-height-to-
+    // font-size ratio (38px / 22px there) scaled to this canvas's 40px
+    // text — the previous fixed 46 was noticeably tighter than that ratio
+    // (a ~1.15x line-height instead of ~1.73x), which is why lines that
+    // looked normally spaced while typing came out visibly cramped
+    // together once saved
+    const CANVAS_FONT_SIZE = 40;
+    const W = 700, H = 900, marginX = 92, lineGap = CANVAS_FONT_SIZE * (38 / 22), top = 150;
     const c = makeCanvas(W, H);
     const ctx = c.getContext('2d');
     const tornPts = buildTornPoints(W, H);
@@ -1270,9 +1277,9 @@
       ctx.fill();
     }
 
-    try { await document.fonts.load('40px Caveat'); } catch (e) { /* fall back to default font */ }
+    try { await document.fonts.load(`500 ${CANVAS_FONT_SIZE}px Caveat`); } catch (e) { /* fall back to default font */ }
     ctx.fillStyle = '#3a3226';
-    ctx.font = '40px Caveat, cursive';
+    ctx.font = `500 ${CANVAS_FONT_SIZE}px Caveat, cursive`;
     ctx.textBaseline = 'alphabetic';
     // matches the write-a-note textarea's own usable-width-to-font-size
     // ratio (278px / 22px there) so a line wraps at roughly the same word
