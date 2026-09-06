@@ -300,28 +300,82 @@
       ctx.fill();
     }
 
-    // punch rings of small square "openwork" holes at increasing radii —
-    // like a filet-crochet net — leaving solid bands between them so the
-    // lace still reads as one connected piece, not confetti
+    // several distinct concentric bands, each its own motif, worked from
+    // the outer edge inward — a single repeating grid of holes (the
+    // original version) read as far plainer than a real crocheted piece,
+    // which layers different stitch patterns ring by ring
     ctx.globalCompositeOperation = 'destination-out';
-    const ringRadii = [R * 0.3, R * 0.46, R * 0.62, R * 0.78, R * 0.9];
-    ringRadii.forEach((ringR, ri) => {
-      const holes = 26 + ri * 9;
-      const holeSize = 9 + ri * 2;
-      for (let i = 0; i < holes; i++) {
-        const a = (i / holes) * Math.PI * 2 + ri * 0.15;
+
+    // Ring 1 (just inside the picot edge): nested fan/shell ridges, like
+    // scallop-stitch crochet — wedges of concentric arcs with gaps between
+    const fanWedges = 21;
+    const fanOuter = R * 0.93;
+    const fanInner = R * 0.76;
+    for (let i = 0; i < fanWedges; i++) {
+      const a0 = (i / fanWedges) * Math.PI * 2;
+      const a1 = a0 + ((Math.PI * 2) / fanWedges) * 0.82;
+      for (let k = 0; k < 3; k++) {
+        const rr = fanInner + ((fanOuter - fanInner) * (k + 0.5)) / 3;
+        ctx.beginPath();
+        ctx.arc(cx, cy, rr, a0, a1);
+        ctx.lineWidth = ((fanOuter - fanInner) / 3) * 0.4;
+        ctx.stroke();
+      }
+    }
+
+    // Ring 2: a fine diamond mesh (net ground), the backdrop filet
+    // crochet motifs usually sit against
+    const meshR1 = R * 0.56, meshR2 = R * 0.72;
+    const meshRings = 5, meshPerRing = 46;
+    for (let ri = 0; ri < meshRings; ri++) {
+      const ringR = meshR1 + ((meshR2 - meshR1) * ri) / (meshRings - 1);
+      for (let i = 0; i < meshPerRing; i++) {
+        const a = (i / meshPerRing) * Math.PI * 2 + (ri % 2 ? Math.PI / meshPerRing : 0);
         ctx.save();
         ctx.translate(cx + Math.cos(a) * ringR, cy + Math.sin(a) * ringR);
-        ctx.rotate(a);
-        ctx.fillRect(-holeSize / 2, -holeSize / 2, holeSize, holeSize);
+        ctx.rotate(a + Math.PI / 4);
+        ctx.fillRect(-6, -6, 12, 12);
         ctx.restore();
       }
-    });
-    // a few larger openings near the center for a lacy medallion look
+    }
+
+    // small open flower motifs at intervals over the mesh, like the rose
+    // shapes worked into a real filet-crochet doily
+    const flowerR = R * 0.64;
+    const flowerCount = 8;
+    for (let i = 0; i < flowerCount; i++) {
+      const a = (i / flowerCount) * Math.PI * 2;
+      const fx = cx + Math.cos(a) * flowerR, fy = cy + Math.sin(a) * flowerR;
+      const petals = 6;
+      for (let p = 0; p < petals; p++) {
+        const pa = (p / petals) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(fx + Math.cos(pa) * 12, fy + Math.sin(pa) * 12, 8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Ring 3: a pinwheel of spoke-shaped openings closer to the center
+    const spokeCount = 14;
+    const spokeInner = R * 0.22;
+    const spokeOuter = R * 0.46;
+    for (let i = 0; i < spokeCount; i++) {
+      const a0 = (i / spokeCount) * Math.PI * 2 + (Math.PI / spokeCount) * 0.35;
+      const a1 = a0 + ((Math.PI * 2) / spokeCount) * 0.4;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a0) * spokeInner, cy + Math.sin(a0) * spokeInner);
+      ctx.arc(cx, cy, spokeOuter, a0, a1);
+      ctx.lineTo(cx + Math.cos(a1) * spokeInner, cy + Math.sin(a1) * spokeInner);
+      ctx.arc(cx, cy, spokeInner, a1, a0, true);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // center rosette — a small ring of petal dots around a solid heart
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
       ctx.beginPath();
-      ctx.arc(cx + Math.cos(a) * R * 0.14, cy + Math.sin(a) * R * 0.14, 9, 0, Math.PI * 2);
+      ctx.arc(cx + Math.cos(a) * R * 0.1, cy + Math.sin(a) * R * 0.1, 7, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalCompositeOperation = 'source-over';
