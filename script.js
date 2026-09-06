@@ -18,7 +18,10 @@
     pointerDownPos: null,
     pointerDownTime: 0,
     pointerMoved: false,
-    muted: localStorage.getItem('memoryBoxMuted') === 'true',
+    // sound (effects + music) always starts on for a fresh visit or a
+    // hard refresh, regardless of whatever was left muted last time — the
+    // mute toggle only ever applies for the rest of that session
+    muted: false,
     viewerOpen: false,
     stackCount: 0,
     overTrash: false
@@ -1581,7 +1584,6 @@
   refreshSoundIcon();
   soundBtn.addEventListener('click', () => {
     state.muted = !state.muted;
-    localStorage.setItem('memoryBoxMuted', String(state.muted));
     refreshSoundIcon();
     if (ytPlayerReady) {
       if (state.muted) ytPlayer.pauseVideo();
