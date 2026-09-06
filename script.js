@@ -1090,7 +1090,7 @@
     return t;
   }
 
-  function createMemoryObject(imgSrc, rawTransform, borderStyle, onReady) {
+  function createMemoryObject(imgSrc, rawTransform, borderStyle, onReady, noteText) {
     const transform = normalizeTransform(rawTransform);
     const img = new Image();
     img.onload = () => {
@@ -1157,18 +1157,18 @@
       group.userData.lifted = false;
 
       boxGroup.add(group);
-      const record = { group, mesh, imgSrc, transform, borderStyle };
+      const record = { group, mesh, imgSrc, transform, borderStyle, noteText };
       state.memories.push(record);
       if (onReady) onReady(record);
     };
     img.src = imgSrc;
   }
 
-  function addMemoryFromDataURL(dataURL, storedTransform, borderStyle) {
+  function addMemoryFromDataURL(dataURL, storedTransform, borderStyle, noteText) {
     const index = state.stackCount++;
     const transform = storedTransform || randomTransform(index);
     const style = borderStyle || (Math.random() > 0.55 ? 'polaroid' : 'plain');
-    createMemoryObject(dataURL, transform, style);
+    createMemoryObject(dataURL, transform, style, undefined, noteText);
   }
 
   /* ----------------------------- written notes ------------------------------ */
@@ -1240,9 +1240,11 @@
     const TA_PAPER_HEIGHT = 480; // #note-paper's real height (desktop)
     const TA_FONT_SIZE = 22, TA_LINE_HEIGHT = 38;
     // fraction of the paper's height where the textarea's own first line
-    // of text actually starts, measured directly against its rendered
-    // position (not estimated from font metrics)
-    const TA_FIRST_LINE_FRACTION = 0.0904;
+    // of text actually starts. The measured 0.0904 (from a mirror element
+    // standing in for the textarea) put the saved note's text too high
+    // compared to how it actually looks while writing it — nudged down
+    // to match what's actually seen, rather than the theoretical value.
+    const TA_FIRST_LINE_FRACTION = 0.115;
     const SCALE = H / TA_PAPER_HEIGHT;
     const CANVAS_FONT_SIZE = TA_FONT_SIZE * SCALE;
     const lineGap = TA_LINE_HEIGHT * SCALE;
@@ -1251,6 +1253,12 @@
     const ascent = 26 * (CANVAS_FONT_SIZE / 40);
     const top = TA_FIRST_LINE_FRACTION * H + ascent;
     const c = makeCanvas(W, H);
+    // matches the write-a-note textarea's own font-feature-settings —
+    // some browsers' canvas text shaping takes cues from the canvas
+    // element's own CSS, so this keeps the same letter consistently
+    // shaped here as it is in the textarea, best-effort
+    c.style.fontVariantLigatures = 'none';
+    c.style.fontFeatureSettings = '"calt" 0, "liga" 0, "dlig" 0, "hlig" 0, "rand" 0, "rclt" 0';
     const ctx = c.getContext('2d');
     const tornPts = buildTornPoints(W, H);
 
@@ -1322,16 +1330,21 @@
   const addNoteBtn = document.getElementById('add-note-btn');
   const noteSaveBtn = document.getElementById('note-save-btn');
   const noteClose = document.getElementById('note-close');
+  // set when the overlay was opened to edit an existing note rather than
+  // write a new one — the save handler below checks this to decide
+  // whether to replace that memory in place or add a brand new one
+  let editingNoteRecord = null;
 
-  function openNoteOverlay() {
-    noteTextarea.value = '';
+  function openNoteOverlay(prefillText) {
+    noteTextarea.value = prefillText || '';
     noteOverlay.classList.remove('hidden');
     setTimeout(() => noteTextarea.focus(), 50);
   }
-  function closeNoteOverlay() { noteOverlay.classList.add('hidden'); }
+  function closeNoteOverlay() { noteOverlay.classList.add('hidden'); editingNoteRecord = null; }
 
   addNoteBtn.addEventListener('click', () => {
     if (!state.boxOpen) openBox();
+    editingNoteRecord = null;
     openNoteOverlay();
   });
   noteClose.addEventListener('click', closeNoteOverlay);
@@ -1341,7 +1354,16 @@
     const text = noteTextarea.value.trim();
     if (!text) { noteTextarea.focus(); return; }
     const dataURL = await renderNoteToDataURL(text);
-    addMemoryFromDataURL(dataURL, null, 'note');
+    if (editingNoteRecord) {
+      // keep the note exactly where it was sitting in the box rather than
+      // giving it a new random spot, since this is an edit, not a new note
+      const rec = editingNoteRecord;
+      const transform = { ...rec.transform };
+      removeMemoryRecord(rec);
+      createMemoryObject(dataURL, transform, 'note', undefined, text);
+    } else {
+      addMemoryFromDataURL(dataURL, null, 'note', text);
+    }
     closeNoteOverlay();
     hideGuide();
     maybeShowGuide('add');
@@ -1575,6 +1597,7 @@
   const viewerOverlay = document.getElementById('viewer-overlay');
   const viewerImage = document.getElementById('viewer-image');
   const viewerClose = document.getElementById('viewer-close');
+  const viewerEdit = document.getElementById('viewer-edit');
   let activeViewerRecord = null;
 
   function openMemoryViewer(rec) {
@@ -1586,6 +1609,8 @@
     // background, so that framing would just paint a white rectangle
     // around it instead of showing the same shape it has everywhere else
     viewerImage.classList.toggle('viewer-image-note', rec.borderStyle === 'note');
+    // only notes can be edited in place — a photo has no "text" to revise
+    viewerEdit.classList.toggle('hidden', rec.borderStyle !== 'note');
     rec.mesh.visible = false;
     viewerOverlay.classList.remove('hidden');
     requestAnimationFrame(() => viewerOverlay.classList.add('open'));
@@ -1606,6 +1631,14 @@
     closeMemoryViewer();
   });
   viewerClose.addEventListener('click', (e) => { e.stopPropagation(); closeMemoryViewer(); });
+  viewerEdit.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const rec = activeViewerRecord;
+    if (!rec) return;
+    closeMemoryViewer();
+    editingNoteRecord = rec;
+    openNoteOverlay(rec.noteText || '');
+  });
 
   /* ----------------------------- delete a memory ----------------------------- */
   function removeMemoryRecord(rec) {
