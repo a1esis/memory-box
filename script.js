@@ -268,6 +268,86 @@
   wall.position.set(0, 5, -7);
   scene.add(wall);
 
+  // a round crocheted lace doily under the box — a real alpha cutout (like
+  // the note's torn edge) rather than a flat printed circle, so the
+  // floor's own wood grain actually shows through every hole in the lace.
+  // Sits just above the floor (same MeshStandardMaterial/receiveShadow
+  // setup) so it picks up the exact same key light and cast shadows the
+  // floor does, and just below the floor's window-light/contact-shadow
+  // decals so those still layer on top of it correctly.
+  const DOILY_RADIUS = 2.2;
+  const doilyTex = (() => {
+    const size = 1024;
+    const c = makeCanvas(size, size);
+    const ctx = c.getContext('2d');
+    const cx = size / 2, cy = size / 2;
+    const R = size / 2 - 6;
+
+    ctx.clearRect(0, 0, size, size);
+    ctx.fillStyle = '#efe7d2';
+
+    // scalloped base disc — a ring of overlapping bumps around a solid
+    // core, like a crocheted picot edge
+    const bumps = 42;
+    const bumpR = (2 * Math.PI * R) / bumps / 1.7;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R - bumpR * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+    for (let i = 0; i < bumps; i++) {
+      const a = (i / bumps) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.arc(cx + Math.cos(a) * (R - bumpR * 0.6), cy + Math.sin(a) * (R - bumpR * 0.6), bumpR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // punch rings of small square "openwork" holes at increasing radii —
+    // like a filet-crochet net — leaving solid bands between them so the
+    // lace still reads as one connected piece, not confetti
+    ctx.globalCompositeOperation = 'destination-out';
+    const ringRadii = [R * 0.3, R * 0.46, R * 0.62, R * 0.78, R * 0.9];
+    ringRadii.forEach((ringR, ri) => {
+      const holes = 26 + ri * 9;
+      const holeSize = 9 + ri * 2;
+      for (let i = 0; i < holes; i++) {
+        const a = (i / holes) * Math.PI * 2 + ri * 0.15;
+        ctx.save();
+        ctx.translate(cx + Math.cos(a) * ringR, cy + Math.sin(a) * ringR);
+        ctx.rotate(a);
+        ctx.fillRect(-holeSize / 2, -holeSize / 2, holeSize, holeSize);
+        ctx.restore();
+      }
+    });
+    // a few larger openings near the center for a lacy medallion look
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.arc(cx + Math.cos(a) * R * 0.14, cy + Math.sin(a) * R * 0.14, 9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+
+    // faint thread grain so it doesn't read as perfectly flat/printed
+    ctx.globalAlpha = 0.06;
+    for (let i = 0; i < 3000; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * R;
+      ctx.fillStyle = Math.random() > 0.5 ? '#fff' : '#8a7f63';
+      ctx.fillRect(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 1, 1);
+    }
+    ctx.globalAlpha = 1;
+
+    return new THREE.CanvasTexture(c);
+  })();
+
+  const doily = new THREE.Mesh(
+    new THREE.PlaneGeometry(DOILY_RADIUS * 2, DOILY_RADIUS * 2),
+    new THREE.MeshStandardMaterial({ map: doilyTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.85 })
+  );
+  doily.rotation.x = -Math.PI / 2;
+  doily.position.set(0, -FOOT_H + 0.001, 0);
+  doily.receiveShadow = true;
+  scene.add(doily);
+
   /* ----------------------------- the memory box ---------------------------- */
   const boxGroup = new THREE.Group();
   scene.add(boxGroup);
