@@ -1243,8 +1243,9 @@
     // of text actually starts. The measured 0.0904 (from a mirror element
     // standing in for the textarea) put the saved note's text too high
     // compared to how it actually looks while writing it — nudged down
-    // to match what's actually seen, rather than the theoretical value.
-    const TA_FIRST_LINE_FRACTION = 0.115;
+    // twice now to match what's actually seen, rather than the
+    // theoretical value.
+    const TA_FIRST_LINE_FRACTION = 0.16;
     const SCALE = H / TA_PAPER_HEIGHT;
     const CANVAS_FONT_SIZE = TA_FONT_SIZE * SCALE;
     const lineGap = TA_LINE_HEIGHT * SCALE;
