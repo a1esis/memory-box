@@ -923,7 +923,15 @@
           : { map: tex, roughness: 0.85 }
       );
       const backMat = new THREE.MeshStandardMaterial({ map: backTex, roughness: 0.9 });
-      const edgeMat = new THREE.MeshStandardMaterial({ color: 0xe9ddc4, roughness: 0.9 });
+      // the card's thin side faces are normally a cream tone that blends
+      // into a photo's own cream print-border — but a note's front texture
+      // is a torn cutout that doesn't fill the rectangle everywhere, so
+      // that same cream showed through the gaps as a faint white outline
+      // tracing the card's true (rectangular) edge. A dark tone instead
+      // reads as a natural shadowed paper edge rather than a border.
+      const edgeMat = new THREE.MeshStandardMaterial(
+        borderStyle === 'note' ? { color: 0x3a3226, roughness: 0.95 } : { color: 0xe9ddc4, roughness: 0.9 }
+      );
       // BoxGeometry material order: px, nx, py, ny, pz, nz
       const mats = [edgeMat, edgeMat, edgeMat, edgeMat, frontMat, backMat];
       const mesh = new THREE.Mesh(geo, mats);
