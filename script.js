@@ -1228,20 +1228,28 @@
   // same ragged silhouette as the write-a-note overlay instead of a
   // rectangle with a squiggle near its edge.
   async function renderNoteToDataURL(text) {
-    // lineGap matches the write-a-note textarea's own line-height-to-
-    // font-size ratio (38px / 22px there) scaled to this canvas's 40px
-    // text — the previous fixed 46 was noticeably tighter than that ratio
-    // (a ~1.15x line-height instead of ~1.73x), which is why lines that
-    // looked normally spaced while typing came out visibly cramped
-    // together once saved
-    const CANVAS_FONT_SIZE = 40;
-    // top (the baseline of the first line) matches the fraction of the
-    // paper's height where the write-a-note textarea's own first line
-    // actually starts (~9% down, measured directly against its rendered
-    // box) — the old fixed 150 sat proportionally lower than that, so the
-    // saved note's text block started visibly further down the page than
-    // it did while writing it
-    const W = 700, H = 900, marginX = 92, lineGap = CANVAS_FONT_SIZE * (38 / 22), top = 107;
+    const W = 700, H = 900, marginX = 92;
+    // every text metric below is derived from ONE scale factor (this
+    // canvas's height over the write-a-note textarea's real paper height)
+    // applied to that textarea's own measured numbers, rather than
+    // separately-guessed constants for font size / line spacing / start
+    // position that don't quite agree with each other — small mismatches
+    // between them were exactly why the saved note kept looking subtly
+    // "off" from the textarea even after fixing spacing and start position
+    // individually.
+    const TA_PAPER_HEIGHT = 480; // #note-paper's real height (desktop)
+    const TA_FONT_SIZE = 22, TA_LINE_HEIGHT = 38;
+    // fraction of the paper's height where the textarea's own first line
+    // of text actually starts, measured directly against its rendered
+    // position (not estimated from font metrics)
+    const TA_FIRST_LINE_FRACTION = 0.0904;
+    const SCALE = H / TA_PAPER_HEIGHT;
+    const CANVAS_FONT_SIZE = TA_FONT_SIZE * SCALE;
+    const lineGap = TA_LINE_HEIGHT * SCALE;
+    // baseline-to-glyph-top distance measured at a 40px reference size,
+    // scaled to whatever CANVAS_FONT_SIZE actually comes out to
+    const ascent = 26 * (CANVAS_FONT_SIZE / 40);
+    const top = TA_FIRST_LINE_FRACTION * H + ascent;
     const c = makeCanvas(W, H);
     const ctx = c.getContext('2d');
     const tornPts = buildTornPoints(W, H);
@@ -1291,7 +1299,8 @@
     // ratio (278px / 22px there) so a line wraps at roughly the same word
     // here as it did while actually typing it, instead of a wider canvas
     // line fitting extra words the writer never saw on that line
-    wrapNoteText(ctx, text.trim() || ' ', marginX + 26, top, W - marginX - 100, lineGap, H - 40);
+    const wrapWidth = CANVAS_FONT_SIZE * (278 / TA_FONT_SIZE);
+    wrapNoteText(ctx, text.trim() || ' ', marginX + 26, top, wrapWidth, lineGap, H - 40);
     ctx.restore();
 
     // a frayed-fiber highlight right on the torn edge itself, still
