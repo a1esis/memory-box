@@ -1235,7 +1235,13 @@
     // looked normally spaced while typing came out visibly cramped
     // together once saved
     const CANVAS_FONT_SIZE = 40;
-    const W = 700, H = 900, marginX = 92, lineGap = CANVAS_FONT_SIZE * (38 / 22), top = 150;
+    // top (the baseline of the first line) matches the fraction of the
+    // paper's height where the write-a-note textarea's own first line
+    // actually starts (~9% down, measured directly against its rendered
+    // box) — the old fixed 150 sat proportionally lower than that, so the
+    // saved note's text block started visibly further down the page than
+    // it did while writing it
+    const W = 700, H = 900, marginX = 92, lineGap = CANVAS_FONT_SIZE * (38 / 22), top = 107;
     const c = makeCanvas(W, H);
     const ctx = c.getContext('2d');
     const tornPts = buildTornPoints(W, H);
