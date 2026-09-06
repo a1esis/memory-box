@@ -9,7 +9,7 @@
 <title>Memory Box</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Caveat:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=7" />
+<link rel="stylesheet" href="style.css?v=8" />
 </head>
 <body>
 
@@ -94,15 +94,21 @@
     <div id="loading-text">opening the room&hellip;</div>
   </div>
 
+  <!-- title splash, shown right after the loading screen fades -->
+  <div id="splash-screen" class="hidden">
+    <div id="splash-title">virtual memory box</div>
+    <div id="splash-subtitle">optimized for desktop viewing</div>
+  </div>
+
   <!-- runs immediately, well before the heavier scripts below, so the
        loading text stays hidden only as long as it actually needs to
        while the real "Caveat" font finishes loading (see style.css) -->
   <script>
     (function () {
-      var el = document.getElementById('loading-text');
-      function reveal() { el.classList.add('fonts-ready'); }
+      var els = [document.getElementById('loading-text'), document.getElementById('splash-title'), document.getElementById('splash-subtitle')];
+      function reveal() { els.forEach(function (el) { el.classList.add('fonts-ready'); }); }
       if (document.fonts && document.fonts.load) {
-        document.fonts.load('28px Caveat').then(reveal).catch(reveal);
+        Promise.all([document.fonts.load('28px Caveat'), document.fonts.load('italic 16px "Cormorant Garamond"')]).then(reveal).catch(reveal);
         setTimeout(reveal, 600); // safety net if font loading stalls
       } else {
         reveal();
@@ -116,6 +122,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js?v=3"></script>
-  <script src="script.js?v=39"></script>
+  <script src="script.js?v=40"></script>
 </body>
 </html>

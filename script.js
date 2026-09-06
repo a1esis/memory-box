@@ -1747,11 +1747,32 @@
     animate();
 
     const loadingScreen = document.getElementById('loading-screen');
+    const splashScreen = document.getElementById('splash-screen');
+
+    // the title splash takes over right where the loading screen leaves
+    // off, then hands off to the usual first-visit guide hints once it's
+    // gone — dismissible early by a click, or on its own after a few seconds
+    function showSplash() {
+      splashScreen.classList.remove('hidden');
+      let dismissed = false;
+      const dismissSplash = () => {
+        if (dismissed) return;
+        dismissed = true;
+        splashScreen.classList.add('fade-out');
+        setTimeout(() => splashScreen.remove(), 900);
+        maybeShowGuide('intro');
+        maybeShowGuide('open');
+      };
+      splashScreen.addEventListener('click', dismissSplash);
+      setTimeout(dismissSplash, 3200);
+    }
+
     setTimeout(() => {
       loadingScreen.classList.add('fade-out');
-      setTimeout(() => loadingScreen.remove(), 1000);
-      maybeShowGuide('intro');
-      maybeShowGuide('open');
+      setTimeout(() => {
+        loadingScreen.remove();
+        showSplash();
+      }, 1000);
     }, 500);
 
     setTimeout(() => footerHint.classList.add('fade'), 9000);
