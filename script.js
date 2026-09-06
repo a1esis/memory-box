@@ -1749,29 +1749,28 @@
     const loadingScreen = document.getElementById('loading-screen');
     const splashScreen = document.getElementById('splash-screen');
 
-    // the title splash takes over right where the loading screen leaves
-    // off, then hands off to the usual first-visit guide hints once it's
-    // gone — dismissible early by a click, or on its own after a few seconds
-    function showSplash() {
-      splashScreen.classList.remove('hidden');
-      let dismissed = false;
-      const dismissSplash = () => {
-        if (dismissed) return;
-        dismissed = true;
-        splashScreen.classList.add('fade-out');
-        setTimeout(() => splashScreen.remove(), 900);
-        maybeShowGuide('intro');
-        maybeShowGuide('open');
-      };
-      splashScreen.addEventListener('click', dismissSplash);
-      setTimeout(dismissSplash, 3200);
+    // the splash sits ready behind the loading screen (lower z-index, same
+    // solid dark background) from the very start, already showing its own
+    // text — so when the loading screen fades out, it crossfades straight
+    // into the splash instead of briefly revealing the box underneath.
+    // The box itself only becomes reachable once the splash is dismissed.
+    splashScreen.classList.remove('hidden');
+    let splashDismissed = false;
+    function dismissSplash() {
+      if (splashDismissed) return;
+      splashDismissed = true;
+      splashScreen.classList.add('fade-out');
+      setTimeout(() => splashScreen.remove(), 900);
+      maybeShowGuide('intro');
+      maybeShowGuide('open');
     }
+    splashScreen.addEventListener('click', dismissSplash);
 
     setTimeout(() => {
       loadingScreen.classList.add('fade-out');
       setTimeout(() => {
         loadingScreen.remove();
-        showSplash();
+        setTimeout(dismissSplash, 3200);
       }, 1000);
     }, 500);
 
