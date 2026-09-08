@@ -1804,26 +1804,71 @@
   const YT_MUSIC_VIDEO_ID = 'xeF5XQ8Lpio';
   let ytPlayer = null;
   let ytPlayerReady = false;
+  // a song picked before the player exists yet (either the visitor's own
+  // pick, still mid-async-load, or one restored from a shared box) waits
+  // here and is applied as soon as the player becomes ready
+  let pendingSongId = null;
+
+  // accepts a full YouTube URL in any of its common shapes (watch?v=,
+  // youtu.be/, embed/, shorts/, music.youtube.com, a bare 11-char id) and
+  // returns just the video id, or null if none could be found
+  function extractYouTubeId(input) {
+    const s = (input || '').trim();
+    if (!s) return null;
+    if (/^[\w-]{11}$/.test(s)) return s;
+    let url;
+    try { url = new URL(s.includes('://') ? s : `https://${s}`); } catch (e) { return null; }
+    const host = url.hostname.replace(/^www\./, '');
+    if (host === 'youtu.be') {
+      const id = url.pathname.slice(1).split('/')[0];
+      return /^[\w-]{11}$/.test(id) ? id : null;
+    }
+    if (host === 'youtube.com' || host === 'music.youtube.com' || host === 'm.youtube.com') {
+      const v = url.searchParams.get('v');
+      if (v) return /^[\w-]{11}$/.test(v) ? v : null;
+      const match = url.pathname.match(/^\/(?:embed|shorts|live)\/([\w-]{11})/);
+      if (match) return match[1];
+    }
+    return null;
+  }
+
+  // swaps the background track to the given video id, whenever the player
+  // happens to be ready for it
+  function applySong(videoId) {
+    if (ytPlayerReady) {
+      ytPlayer.loadVideoById(videoId);
+      if (state.muted) ytPlayer.pauseVideo();
+    } else {
+      pendingSongId = videoId;
+    }
+  }
 
   window.onYouTubeIframeAPIReady = function () {
+    const initialVideoId = pendingSongId || YT_MUSIC_VIDEO_ID;
+    pendingSongId = null;
     ytPlayer = new YT.Player('yt-audio-player', {
       width: '2',
       height: '2',
-      videoId: YT_MUSIC_VIDEO_ID,
+      videoId: initialVideoId,
       playerVars: {
         autoplay: 1,
         controls: 0,
         disablekb: 1,
         fs: 0,
-        loop: 1,
-        playlist: YT_MUSIC_VIDEO_ID, // required by YouTube for a single video to loop
         playsinline: 1
       },
       events: {
         onReady: (e) => {
           ytPlayerReady = true;
           e.target.setVolume(45);
-          if (!state.muted) e.target.playVideo();
+          if (pendingSongId) { e.target.loadVideoById(pendingSongId); pendingSongId = null; }
+          if (state.muted) e.target.pauseVideo(); else e.target.playVideo();
+        },
+        // loops whatever's currently loaded — the birdsong default or any
+        // song a visitor picks — since a single custom video can't rely on
+        // the constructor's old playlist-of-one trick to loop itself
+        onStateChange: (e) => {
+          if (e.data === YT.PlayerState.ENDED) e.target.playVideo();
         }
       }
     });
@@ -1860,6 +1905,50 @@
       if (state.muted) ytPlayer.pauseVideo();
       else ytPlayer.playVideo();
     }
+  });
+
+  /* ----------------------------- background song picker --------------- */
+  // never persisted locally — every fresh visit starts with the default
+  // birdsong track, same as memories and the engraving, unless a share
+  // link restores one (see loadSharedBox)
+  let currentSongId = null;
+  let currentSongUrl = '';
+
+  const songBtn = document.getElementById('song-btn');
+  const songOverlay = document.getElementById('song-overlay');
+  const songInput = document.getElementById('song-input');
+  const songError = document.getElementById('song-error');
+  const songSaveBtn = document.getElementById('song-save-btn');
+  const songResetBtn = document.getElementById('song-reset-btn');
+  const songClose = document.getElementById('song-close');
+
+  function openSongOverlay() {
+    songInput.value = currentSongUrl;
+    songError.classList.add('hidden');
+    songOverlay.classList.remove('hidden');
+    setTimeout(() => songInput.focus(), 50);
+  }
+  function closeSongOverlay() { songOverlay.classList.add('hidden'); }
+
+  songBtn.addEventListener('click', openSongOverlay);
+  songClose.addEventListener('click', closeSongOverlay);
+  songOverlay.addEventListener('click', (e) => { if (e.target === songOverlay) closeSongOverlay(); });
+  songInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') songSaveBtn.click(); });
+  songSaveBtn.addEventListener('click', () => {
+    const raw = songInput.value.trim();
+    if (!raw) { closeSongOverlay(); return; }
+    const id = extractYouTubeId(raw);
+    if (!id) { songError.classList.remove('hidden'); return; }
+    currentSongId = id;
+    currentSongUrl = raw;
+    applySong(id);
+    closeSongOverlay();
+  });
+  songResetBtn.addEventListener('click', () => {
+    currentSongId = null;
+    currentSongUrl = '';
+    applySong(YT_MUSIC_VIDEO_ID);
+    closeSongOverlay();
   });
 
   /* ----------------------------- share via Firebase (Firestore) --------------- */
@@ -1913,6 +2002,11 @@
       if (boxData && boxData.engraving) {
         currentEngraving = boxData.engraving;
         renderLidEngraving(currentEngraving);
+      }
+      if (boxData && boxData.songId) {
+        currentSongId = boxData.songId;
+        currentSongUrl = `https://youtu.be/${boxData.songId}`;
+        applySong(boxData.songId);
       }
       const snap = await db.collection('boxes').doc(boxId).collection('memories').orderBy('order').get();
       snap.forEach((doc) => {
@@ -1985,7 +2079,7 @@
 
     try {
       const boxRef = db.collection('boxes').doc();
-      await boxRef.set({ createdAt: firebase.firestore.FieldValue.serverTimestamp(), engraving: currentEngraving });
+      await boxRef.set({ createdAt: firebase.firestore.FieldValue.serverTimestamp(), engraving: currentEngraving, songId: currentSongId });
 
       const memories = state.memories.slice();
       for (let i = 0; i < memories.length; i++) {

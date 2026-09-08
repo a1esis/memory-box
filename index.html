@@ -9,7 +9,7 @@
 <title>Memory Box</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Caveat:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=11" />
+<link rel="stylesheet" href="style.css?v=12" />
 </head>
 <body>
 
@@ -33,6 +33,7 @@
     <button id="sound-btn" class="pill" title="Toggle sound" aria-label="Toggle sound">
       <span id="sound-icon">♪</span>
     </button>
+    <button id="song-btn" class="pill" title="Change the background song">&#9835; Song</button>
     <button id="add-btn" class="pill" title="Add a memory">+ Add Memory</button>
     <button id="engrave-btn" class="pill" title="Engrave something on the lid">&#9998; Engrave</button>
     <button id="add-note-btn" class="pill" title="Write a note to keep in the box">+ Add Note</button>
@@ -80,6 +81,19 @@
       <div id="engrave-hint">Shows on the lid, and carries over if you share the box.</div>
     </div>
     <button id="engrave-close" aria-label="Close">✕</button>
+  </div>
+
+  <!-- background song overlay -->
+  <div id="song-overlay" class="hidden">
+    <div id="song-card">
+      <div id="song-title">Set the background song</div>
+      <input id="song-input" type="text" maxlength="200" placeholder="Paste a YouTube link&hellip;" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+      <div id="song-error" class="hidden">Couldn&rsquo;t find a video in that link &mdash; try pasting the full YouTube URL.</div>
+      <button id="song-save-btn" class="pill">Play this song</button>
+      <div id="song-hint">Carries over if you share the box.</div>
+      <button id="song-reset-btn">Use the default sound instead</button>
+    </div>
+    <button id="song-close" aria-label="Close">✕</button>
   </div>
 
   <!-- share link overlay -->
@@ -135,6 +149,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js?v=3"></script>
-  <script src="script.js?v=68"></script>
+  <script src="script.js?v=71"></script>
 </body>
 </html>
