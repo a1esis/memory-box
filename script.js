@@ -1137,7 +1137,12 @@
     return t;
   }
 
-  function createMemoryObject(imgSrc, rawTransform, borderStyle, onReady, noteText) {
+  // preserveY skips the landingSpot recompute below and trusts the given
+  // transform's y exactly as-is — used when restoring a shared box or
+  // putting an edited note back, where the position (including its
+  // stacking height) should reproduce exactly what was there before,
+  // not be freshly (re-)computed as if it were a brand new placement
+  function createMemoryObject(imgSrc, rawTransform, borderStyle, onReady, noteText, preserveY) {
     const transform = normalizeTransform(rawTransform);
     const img = new Image();
     img.onload = () => {
@@ -1157,7 +1162,9 @@
       const stackClearance = cardStackClearance(w, h, transform.rotX, transform.rotZ, transform.scale);
       transform.x = THREE.MathUtils.clamp(transform.x, INTERIOR.xMin + ex, INTERIOR.xMax - ex);
       transform.z = THREE.MathUtils.clamp(transform.z, INTERIOR.zMin + ez, INTERIOR.zMax - ez);
-      transform.y = landingSpot(transform.x, transform.z, ex, ez, vSpan, stackClearance, undefined);
+      if (!preserveY) {
+        transform.y = landingSpot(transform.x, transform.z, ex, ez, vSpan, stackClearance, undefined);
+      }
 
       const geo = new THREE.BoxGeometry(w, h, MEM_THICKNESS);
       // a written note's texture is a real torn-edge cutout (transparent
@@ -1408,7 +1415,7 @@
       const rec = editingNoteRecord;
       const transform = { ...rec.transform };
       removeMemoryRecord(rec);
-      createMemoryObject(dataURL, transform, 'note', undefined, text);
+      createMemoryObject(dataURL, transform, 'note', undefined, text, true);
     } else {
       addMemoryFromDataURL(dataURL, null, 'note', text);
     }
@@ -2041,7 +2048,7 @@
       snap.forEach((doc) => {
         const data = doc.data();
         state.stackCount++;
-        createMemoryObject(data.imageData, data.transform, data.borderStyle);
+        createMemoryObject(data.imageData, data.transform, data.borderStyle, undefined, data.noteText, true);
       });
     } catch (err) {
       // shared box missing/unreachable — falls back to an empty box
@@ -2106,11 +2113,9 @@
     openShareOverlay();
     shareStatus.textContent = 'Gathering the memories…';
 
-    try {
-      const boxRef = db.collection('boxes').doc();
-      await boxRef.set({ createdAt: firebase.firestore.FieldValue.serverTimestamp(), engraving: currentEngraving });
+    const memories = state.memories.slice();
 
-      const memories = state.memories.slice();
+    async function writeAllMemories(boxRef) {
       for (let i = 0; i < memories.length; i++) {
         shareStatus.textContent = `Packing memory ${i + 1} of ${memories.length}…`;
         const rec = memories[i];
@@ -2119,8 +2124,46 @@
           imageData: safeImage,
           transform: rec.transform,
           borderStyle: rec.borderStyle,
+          noteText: rec.noteText || null,
           order: i
         });
+      }
+    }
+
+    try {
+      let boxRef;
+      // sharing again from a box that was itself opened via a share link
+      // updates that SAME link in place, rather than minting a new one —
+      // otherwise editing something (the engraving, adding/removing/moving
+      // a memory) on an already-shared box and sharing again looked like
+      // it silently did nothing, since the link everyone already has
+      // would never reflect the change.
+      if (sharedBoxId) {
+        try {
+          boxRef = db.collection('boxes').doc(sharedBoxId);
+          // update the box doc itself before touching any memories, so if
+          // this project's Firestore rules don't allow updating an
+          // existing box (write-once rules are the norm for a link like
+          // this, precisely so a recipient can't tamper with what they
+          // were sent), it fails here with nothing changed yet, rather
+          // than after memories have already been partly cleared out
+          await boxRef.set({ engraving: currentEngraving }, { merge: true });
+          const oldMemories = await boxRef.collection('memories').get();
+          const clearBatch = db.batch();
+          oldMemories.forEach(doc => clearBatch.delete(doc.ref));
+          await clearBatch.commit();
+          await writeAllMemories(boxRef);
+        } catch (updateErr) {
+          // couldn't update the existing link in place — fall back to a
+          // fresh one instead of failing the share outright
+          boxRef = db.collection('boxes').doc();
+          await boxRef.set({ createdAt: firebase.firestore.FieldValue.serverTimestamp(), engraving: currentEngraving });
+          await writeAllMemories(boxRef);
+        }
+      } else {
+        boxRef = db.collection('boxes').doc();
+        await boxRef.set({ createdAt: firebase.firestore.FieldValue.serverTimestamp(), engraving: currentEngraving });
+        await writeAllMemories(boxRef);
       }
 
       const shareUrl = `${location.origin}${location.pathname}?box=${boxRef.id}`;
