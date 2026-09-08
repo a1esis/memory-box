@@ -1797,123 +1797,33 @@
   function playPaperDrop() { playBuffer({ duration: 0.18, filterFreq: 1600, filterType: 'highpass', gain: 0.09 }); }
 
   /* ----------------------------- background music (YouTube) --------------- */
-  // Plays the actual videos through YouTube's own official embedded
-  // players (audio-only as far as the visitor can tell — the iframes are
-  // tucked off screen) rather than a locally-hosted copy of the audio, so
-  // this is controlling YouTube's playback, not redistributing the
-  // tracks themselves. Two separate players — one for the default
-  // birdsong ambience, one for a visitor's own song pick — so both can
-  // play together instead of one replacing the other.
+  // Plays the actual video through YouTube's own official embedded player
+  // (audio-only as far as the visitor can tell — the iframe is tucked off
+  // screen) rather than a locally-hosted copy of the audio, so this is
+  // controlling YouTube's playback, not redistributing the track itself.
   const YT_MUSIC_VIDEO_ID = 'xeF5XQ8Lpio';
-  let birdsPlayer = null, birdsPlayerReady = false;
-  let songPlayer = null, songPlayerReady = false;
-  // a song picked before the song player exists yet (either the
-  // visitor's own pick, still mid-async-load, or one restored from a
-  // shared box) waits here and is applied as soon as it becomes ready
-  let pendingSongId = null;
-
-  // accepts a full YouTube URL in any of its common shapes (watch?v=,
-  // youtu.be/, embed/, shorts/, music.youtube.com, a bare 11-char id) and
-  // returns just the video id, or null if none could be found
-  function extractYouTubeId(input) {
-    const s = (input || '').trim();
-    if (!s) return null;
-    if (/^[\w-]{11}$/.test(s)) return s;
-    let url;
-    try { url = new URL(s.includes('://') ? s : `https://${s}`); } catch (e) { return null; }
-    const host = url.hostname.replace(/^www\./, '');
-    if (host === 'youtu.be') {
-      const id = url.pathname.slice(1).split('/')[0];
-      return /^[\w-]{11}$/.test(id) ? id : null;
-    }
-    if (host === 'youtube.com' || host === 'music.youtube.com' || host === 'm.youtube.com') {
-      const v = url.searchParams.get('v');
-      if (v) return /^[\w-]{11}$/.test(v) ? v : null;
-      const match = url.pathname.match(/^\/(?:embed|shorts|live)\/([\w-]{11})/);
-      if (match) return match[1];
-    }
-    return null;
-  }
-
-  // loads the given video into the (separate) song player, whenever it
-  // happens to be ready for it
-  function applySong(videoId) {
-    if (songPlayerReady) {
-      songPlayer.loadVideoById(videoId);
-    } else {
-      pendingSongId = videoId;
-    }
-  }
-
-  // never persisted locally — every fresh visit starts at the same
-  // default level, unless a share link restores one (see loadSharedBox)
-  let currentVolume = 45;
-  function applyVolume(v) {
-    currentVolume = v;
-    if (songPlayerReady) songPlayer.setVolume(v);
-  }
-
-  // whichever of the two players is ready and relevant, actually applies
-  // the master mute switch plus (for the song) its own independent
-  // play/pause state
-  function applyBirdsPlayback() {
-    if (!birdsPlayerReady) return;
-    if (state.muted) birdsPlayer.pauseVideo(); else birdsPlayer.playVideo();
-  }
-  function applySongPlayback() {
-    if (!songPlayerReady || !currentSongId) return;
-    if (state.muted || songPaused) songPlayer.pauseVideo(); else songPlayer.playVideo();
-  }
+  let ytPlayer = null;
+  let ytPlayerReady = false;
 
   window.onYouTubeIframeAPIReady = function () {
-    birdsPlayer = new YT.Player('yt-audio-player', {
+    ytPlayer = new YT.Player('yt-audio-player', {
       width: '2',
       height: '2',
       videoId: YT_MUSIC_VIDEO_ID,
-      playerVars: { autoplay: 1, controls: 0, disablekb: 1, fs: 0, playsinline: 1 },
+      playerVars: {
+        autoplay: 1,
+        controls: 0,
+        disablekb: 1,
+        fs: 0,
+        loop: 1,
+        playlist: YT_MUSIC_VIDEO_ID, // required by YouTube for a single video to loop
+        playsinline: 1
+      },
       events: {
         onReady: (e) => {
-          birdsPlayerReady = true;
+          ytPlayerReady = true;
           e.target.setVolume(45);
-          applyBirdsPlayback();
-        },
-        // loops the birdsong ambience forever
-        onStateChange: (e) => { if (e.data === YT.PlayerState.ENDED) e.target.playVideo(); }
-      }
-    });
-
-    // no videoId here — this player stays empty and silent until a
-    // visitor actually picks a song
-    songPlayer = new YT.Player('yt-song-player', {
-      width: '2',
-      height: '2',
-      playerVars: { autoplay: 0, controls: 0, disablekb: 1, fs: 0, playsinline: 1 },
-      events: {
-        onReady: (e) => {
-          songPlayerReady = true;
-          e.target.setVolume(currentVolume);
-          if (pendingSongId) {
-            const id = pendingSongId;
-            pendingSongId = null;
-            e.target.loadVideoById(id);
-          }
-          applySongPlayback();
-        },
-        // loops whatever song is currently loaded
-        onStateChange: (e) => { if (e.data === YT.PlayerState.ENDED) e.target.playVideo(); },
-        // a custom pick can fail to actually play (private, region-locked,
-        // or embedding disabled by the uploader — common for official
-        // music videos) with no other visible symptom than silence, so
-        // catch that and remove it instead of leaving a dead, silent pick
-        onError: () => {
-          if (currentSongId) {
-            currentSongId = null;
-            currentSongUrl = '';
-            songControls.classList.add('hidden');
-            songError.textContent = "That link couldn't be played here (it may not allow embedding) — the song was removed.";
-            songError.classList.remove('hidden');
-            songOverlay.classList.remove('hidden');
-          }
+          if (!state.muted) e.target.playVideo();
         }
       }
     });
@@ -1922,21 +1832,17 @@
   // most browsers block autoplay WITH sound until the visitor has actually
   // interacted with the page at least once — so alongside the autoplay
   // attempt above (which silently fails in that case), the very first
-  // click/tap/keypress anywhere also starts whichever tracks are supposed
-  // to be playing but aren't yet, which is as close to "already playing
-  // on load" as browser autoplay policy allows
+  // click/tap/keypress anywhere also starts the music if it's supposed to
+  // be playing but isn't yet, which is as close to "already playing on
+  // load" as browser autoplay policy allows
   function ensureMusicPlaying(e) {
     // skip while typing (e.g. writing a note) — no reason for a keystroke
-    // in a text field to also be reaching into the YouTube players
+    // in a text field to also be reaching into the YouTube player
     if (e && e.type === 'keydown' && /^(TEXTAREA|INPUT)$/.test(e.target.tagName)) return;
-    if (state.muted) return;
-    if (birdsPlayerReady) {
-      const s = birdsPlayer.getPlayerState();
-      if (s !== YT.PlayerState.PLAYING && s !== YT.PlayerState.BUFFERING) birdsPlayer.playVideo();
-    }
-    if (songPlayerReady && currentSongId && !songPaused) {
-      const s = songPlayer.getPlayerState();
-      if (s !== YT.PlayerState.PLAYING && s !== YT.PlayerState.BUFFERING) songPlayer.playVideo();
+    if (!ytPlayerReady || state.muted) return;
+    const s = ytPlayer.getPlayerState();
+    if (s !== YT.PlayerState.PLAYING && s !== YT.PlayerState.BUFFERING) {
+      ytPlayer.playVideo();
     }
   }
   ['pointerdown', 'keydown'].forEach(evt => {
@@ -1947,89 +1853,13 @@
   const soundIcon = document.getElementById('sound-icon');
   function refreshSoundIcon() { soundIcon.textContent = state.muted ? '✕' : '♪'; }
   refreshSoundIcon();
-  // master mute — silences both the birdsong ambience and (if one is
-  // playing) the picked song together
-  function setMuted(muted) {
-    state.muted = muted;
+  soundBtn.addEventListener('click', () => {
+    state.muted = !state.muted;
     refreshSoundIcon();
-    refreshSongPlayToggle();
-    applyBirdsPlayback();
-    applySongPlayback();
-  }
-  soundBtn.addEventListener('click', () => setMuted(!state.muted));
-
-  /* ----------------------------- background song picker --------------- */
-  // never persisted locally — every fresh visit starts with just the
-  // default birdsong ambience playing, same as memories and the
-  // engraving, unless a share link restores one (see loadSharedBox)
-  let currentSongId = null;
-  let currentSongUrl = '';
-  // the song's own play/pause state, independent of the master mute —
-  // lets a visitor stop just the song while the birdsong keeps going
-  let songPaused = false;
-
-  const songBtn = document.getElementById('song-btn');
-  const songOverlay = document.getElementById('song-overlay');
-  const songInput = document.getElementById('song-input');
-  const songError = document.getElementById('song-error');
-  const songSaveBtn = document.getElementById('song-save-btn');
-  const songControls = document.getElementById('song-controls');
-  const songToggleBtn = document.getElementById('song-toggle-btn');
-  const songResetBtn = document.getElementById('song-reset-btn');
-  const songClose = document.getElementById('song-close');
-  const songVolumeInput = document.getElementById('song-volume');
-
-  function refreshSongPlayToggle() {
-    const playing = !state.muted && !songPaused;
-    songToggleBtn.innerHTML = playing ? '&#10074;&#10074; Pause' : '&#9654; Play';
-  }
-
-  function openSongOverlay() {
-    songInput.value = currentSongUrl;
-    songError.classList.add('hidden');
-    songControls.classList.toggle('hidden', !currentSongId);
-    refreshSongPlayToggle();
-    songVolumeInput.value = currentVolume;
-    songOverlay.classList.remove('hidden');
-    setTimeout(() => songInput.focus(), 50);
-  }
-  function closeSongOverlay() { songOverlay.classList.add('hidden'); }
-
-  songBtn.addEventListener('click', openSongOverlay);
-  songClose.addEventListener('click', closeSongOverlay);
-  songOverlay.addEventListener('click', (e) => { if (e.target === songOverlay) closeSongOverlay(); });
-  songInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') songSaveBtn.click(); });
-  // explicit start/stop for just the song layer, right where it was
-  // picked — the birdsong ambience keeps playing either way
-  songToggleBtn.addEventListener('click', () => {
-    songPaused = !songPaused;
-    refreshSongPlayToggle();
-    applySongPlayback();
-  });
-  songVolumeInput.addEventListener('input', () => applyVolume(Number(songVolumeInput.value)));
-  songSaveBtn.addEventListener('click', () => {
-    const raw = songInput.value.trim();
-    if (!raw) { closeSongOverlay(); return; }
-    const id = extractYouTubeId(raw);
-    if (!id) { songError.classList.remove('hidden'); return; }
-    songError.classList.add('hidden');
-    currentSongId = id;
-    currentSongUrl = raw;
-    songPaused = false;
-    applySong(id);
-    // picking a song is an explicit request to hear it — starts it (and
-    // the birdsong alongside it) playing even if sound had been muted
-    setMuted(false);
-    songControls.classList.remove('hidden');
-    closeSongOverlay();
-  });
-  songResetBtn.addEventListener('click', () => {
-    currentSongId = null;
-    currentSongUrl = '';
-    if (songPlayerReady) songPlayer.pauseVideo();
-    songControls.classList.add('hidden');
-    songInput.value = '';
-    closeSongOverlay();
+    if (ytPlayerReady) {
+      if (state.muted) ytPlayer.pauseVideo();
+      else ytPlayer.playVideo();
+    }
   });
 
   /* ----------------------------- share via Firebase (Firestore) --------------- */
@@ -2083,14 +1913,6 @@
       if (boxData && boxData.engraving) {
         currentEngraving = boxData.engraving;
         renderLidEngraving(currentEngraving);
-      }
-      if (boxData && boxData.songId) {
-        currentSongId = boxData.songId;
-        currentSongUrl = `https://youtu.be/${boxData.songId}`;
-        applySong(boxData.songId);
-      }
-      if (boxData && typeof boxData.volume === 'number') {
-        applyVolume(boxData.volume);
       }
       const snap = await db.collection('boxes').doc(boxId).collection('memories').orderBy('order').get();
       snap.forEach((doc) => {
@@ -2163,7 +1985,7 @@
 
     try {
       const boxRef = db.collection('boxes').doc();
-      await boxRef.set({ createdAt: firebase.firestore.FieldValue.serverTimestamp(), engraving: currentEngraving, songId: currentSongId, volume: currentVolume });
+      await boxRef.set({ createdAt: firebase.firestore.FieldValue.serverTimestamp(), engraving: currentEngraving });
 
       const memories = state.memories.slice();
       for (let i = 0; i < memories.length; i++) {

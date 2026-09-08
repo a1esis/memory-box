@@ -9,7 +9,7 @@
 <title>Memory Box</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Caveat:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=15" />
+<link rel="stylesheet" href="style.css?v=16" />
 </head>
 <body>
 
@@ -17,15 +17,10 @@
     <canvas id="scene"></canvas>
   </div>
 
-  <!-- background music: YouTube's own official embedded players, hidden
-       and audio-only, controlled by the sound button and song overlay
-       below. Playing the actual videos through YouTube rather than
-       hosting a copy of the audio here. Two separate players so the
-       default birdsong ambience and a picked song can play together. -->
-  <div id="yt-audio-wrap" aria-hidden="true">
-    <div id="yt-audio-player"></div>
-    <div id="yt-song-player"></div>
-  </div>
+  <!-- background music: YouTube's own official embedded player, hidden and
+       audio-only, controlled by the sound button below. Playing the actual
+       video through YouTube rather than hosting a copy of the audio here. -->
+  <div id="yt-audio-wrap" aria-hidden="true"><div id="yt-audio-player"></div></div>
 
   <!-- soft vignette overlay -->
   <div id="vignette"></div>
@@ -38,7 +33,6 @@
     <button id="sound-btn" class="pill" title="Toggle sound" aria-label="Toggle sound">
       <span id="sound-icon">♪</span>
     </button>
-    <button id="song-btn" class="pill" title="Change the background song">&#9835; Song</button>
     <button id="add-btn" class="pill" title="Add a memory">+ Add Memory</button>
     <button id="engrave-btn" class="pill" title="Engrave something on the lid">&#9998; Engrave</button>
     <button id="add-note-btn" class="pill" title="Write a note to keep in the box">+ Add Note</button>
@@ -86,28 +80,6 @@
       <div id="engrave-hint">Shows on the lid, and carries over if you share the box.</div>
     </div>
     <button id="engrave-close" aria-label="Close">✕</button>
-  </div>
-
-  <!-- background song overlay -->
-  <div id="song-overlay" class="hidden">
-    <div id="song-card">
-      <div id="song-title">Add a song</div>
-      <input id="song-input" type="text" maxlength="200" placeholder="Paste a YouTube link&hellip;" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
-      <div id="song-error" class="hidden">Couldn&rsquo;t find a video in that link &mdash; try pasting the full YouTube URL.</div>
-      <button id="song-save-btn" class="pill">Play this song</button>
-      <div id="song-controls" class="hidden">
-        <div id="song-actions">
-          <button id="song-toggle-btn" class="pill">&#10074;&#10074; Pause</button>
-        </div>
-        <div id="song-volume-row">
-          <span id="song-volume-icon">&#9835;</span>
-          <input id="song-volume" type="range" min="0" max="100" value="45" aria-label="Volume" />
-        </div>
-      </div>
-      <div id="song-hint">Plays alongside the birdsong ambience, and carries over if you share the box.</div>
-      <button id="song-reset-btn">Stop the song</button>
-    </div>
-    <button id="song-close" aria-label="Close">✕</button>
   </div>
 
   <!-- share link overlay -->
@@ -163,6 +135,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js?v=3"></script>
-  <script src="script.js?v=78"></script>
+  <script src="script.js?v=79"></script>
 </body>
 </html>
