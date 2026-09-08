@@ -1665,8 +1665,8 @@
 
   fileInput.addEventListener('change', () => {
     const files = Array.from(fileInput.files || []);
-    files.forEach((file, i) => setTimeout(() => handleFile(file), i * 180));
     fileInput.value = '';
+    addFiles(files);
   });
 
   // iPhones save photos as HEIC/HEIF by default, which only Safari can
@@ -1680,34 +1680,57 @@
     return type === 'image/heic' || type === 'image/heif' || name.endsWith('.heic') || name.endsWith('.heif');
   }
 
-  function handleFile(file) {
-    if (!file.type.startsWith('image/') && !isHeic(file)) return;
-    const heic = isHeic(file);
-    if (heic) showGuide('Converting HEIC photo…', 8000);
-    // heic2any (loaded in index.html) converts to a JPEG blob entirely
-    // in the browser via a WASM HEIF decoder — everything past this
-    // point treats it exactly like any other image file
-    const prepared = heic
-      ? heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 }).then(result => Array.isArray(result) ? result[0] : result)
-      : Promise.resolve(file);
+  // reads/converts/resizes one file and adds it as a memory, resolving
+  // to whether it worked rather than throwing — so a batch of many files
+  // (see addFiles) can process every one of them even if a few fail
+  async function handleFile(file) {
+    if (!file.type.startsWith('image/') && !isHeic(file)) return { ok: true };
+    try {
+      let blob = file;
+      if (isHeic(file)) {
+        showGuide('Converting HEIC photo…', 8000);
+        // heic2any (loaded in index.html) converts to a JPEG blob
+        // entirely in the browser via a WASM HEIF decoder — everything
+        // past this point treats it exactly like any other image file
+        const result = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+        blob = Array.isArray(result) ? result[0] : result;
+      }
+      const dataURL = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('read failed'));
+        reader.readAsDataURL(blob);
+      });
+      const resized = await resizeDataURL(dataURL, 1100);
+      addMemoryFromDataURL(resized, null, null);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, name: file.name };
+    }
+  }
 
-    prepared.then(blob => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        resizeDataURL(reader.result, 1100).then(resized => {
-          addMemoryFromDataURL(resized, null, null);
-          hideGuide();
-        }).catch(() => {
-          showGuide(`Couldn't add "${file.name}" — that image format isn't supported.`);
-        });
-      };
-      reader.onerror = () => {
-        showGuide(`Couldn't read "${file.name}".`);
-      };
-      reader.readAsDataURL(blob);
-    }).catch(() => {
-      showGuide(`Couldn't convert "${file.name}" — that HEIC photo couldn't be read.`);
-    });
+  // processes a batch of files one at a time rather than firing them off
+  // in a loose, staggered burst — running many HEIC conversions or large
+  // image decodes at once was fragile (the WASM decoder in particular
+  // isn't built for that) and could quietly drop a photo from a big
+  // batch with no sign anything went wrong. Any that still fail are
+  // collected and reported together at the end instead of a fast-fading
+  // message per file that's easy to miss in a big batch.
+  async function addFiles(files) {
+    const failed = [];
+    for (const file of files) {
+      const result = await handleFile(file);
+      if (!result.ok) failed.push(result.name);
+    }
+    if (failed.length === 1) {
+      showGuide(`Couldn't add "${failed[0]}" — it may be corrupted or in an unsupported format.`, 5500);
+    } else if (failed.length > 1) {
+      const shown = failed.slice(0, 4).join(', ');
+      const rest = failed.length > 4 ? ` +${failed.length - 4} more` : '';
+      showGuide(`${failed.length} photos couldn't be added: ${shown}${rest}`, 7000);
+    } else {
+      hideGuide();
+    }
   }
 
   function resizeDataURL(dataURL, maxDim) {
@@ -1747,7 +1770,9 @@
       if (evt === 'drop') {
         const files = Array.from(e.dataTransfer.files || []);
         if (!state.boxOpen) openBox();
-        files.forEach((file, i) => setTimeout(() => handleFile(file), i * 180 + 400));
+        // a small head start so the box is already opening before the
+        // first dropped card appears, same timing as before
+        setTimeout(() => addFiles(files), 400);
       }
       dragHint.classList.add('hidden');
     });
