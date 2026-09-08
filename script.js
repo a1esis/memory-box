@@ -1669,21 +1669,45 @@
     fileInput.value = '';
   });
 
+  // iPhones save photos as HEIC/HEIF by default, which only Safari can
+  // actually decode — everywhere else an <img> just silently fails to
+  // load one (see resizeDataURL's onerror below). Some systems report
+  // HEIC files with an empty file.type instead of image/heic, so the
+  // filename extension is checked too.
+  function isHeic(file) {
+    const type = (file.type || '').toLowerCase();
+    const name = (file.name || '').toLowerCase();
+    return type === 'image/heic' || type === 'image/heif' || name.endsWith('.heic') || name.endsWith('.heif');
+  }
+
   function handleFile(file) {
-    if (!file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      resizeDataURL(reader.result, 1100).then(resized => {
-        addMemoryFromDataURL(resized, null, null);
-        hideGuide();
-      }).catch(() => {
-        showGuide(`Couldn't add "${file.name}" — that image format isn't supported.`);
-      });
-    };
-    reader.onerror = () => {
-      showGuide(`Couldn't read "${file.name}".`);
-    };
-    reader.readAsDataURL(file);
+    if (!file.type.startsWith('image/') && !isHeic(file)) return;
+    const heic = isHeic(file);
+    if (heic) showGuide('Converting HEIC photo…', 8000);
+    // heic2any (loaded in index.html) converts to a JPEG blob entirely
+    // in the browser via a WASM HEIF decoder — everything past this
+    // point treats it exactly like any other image file
+    const prepared = heic
+      ? heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 }).then(result => Array.isArray(result) ? result[0] : result)
+      : Promise.resolve(file);
+
+    prepared.then(blob => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        resizeDataURL(reader.result, 1100).then(resized => {
+          addMemoryFromDataURL(resized, null, null);
+          hideGuide();
+        }).catch(() => {
+          showGuide(`Couldn't add "${file.name}" — that image format isn't supported.`);
+        });
+      };
+      reader.onerror = () => {
+        showGuide(`Couldn't read "${file.name}".`);
+      };
+      reader.readAsDataURL(blob);
+    }).catch(() => {
+      showGuide(`Couldn't convert "${file.name}" — that HEIC photo couldn't be read.`);
+    });
   }
 
   function resizeDataURL(dataURL, maxDim) {
