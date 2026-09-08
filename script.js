@@ -1676,13 +1676,18 @@
       resizeDataURL(reader.result, 1100).then(resized => {
         addMemoryFromDataURL(resized, null, null);
         hideGuide();
+      }).catch(() => {
+        showGuide(`Couldn't add "${file.name}" — that image format isn't supported.`);
       });
+    };
+    reader.onerror = () => {
+      showGuide(`Couldn't read "${file.name}".`);
     };
     reader.readAsDataURL(file);
   }
 
   function resizeDataURL(dataURL, maxDim) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
         let { width, height } = img;
@@ -1695,6 +1700,12 @@
         c.getContext('2d').drawImage(img, 0, 0, width, height);
         resolve(c.toDataURL('image/jpeg', 0.88));
       };
+      // a file this browser can't actually decode as an image (an
+      // unsupported format like HEIC on some browsers, or a corrupted
+      // file) used to just hang here forever with no resolve or reject —
+      // so a batch upload would silently lose that one photo with
+      // nothing to explain why it never showed up
+      img.onerror = () => reject(new Error('unsupported image'));
       img.src = dataURL;
     });
   }
