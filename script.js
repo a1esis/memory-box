@@ -1756,8 +1756,8 @@
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
     return buffer;
   }
-  function playBuffer({ duration, filterFreq, filterType = 'bandpass', gain = 0.25, pitchFrom, pitchTo }) {
-    if (state.muted) return;
+  function playBuffer({ duration, filterFreq, filterType = 'bandpass', gain = 0.25, pitchFrom, pitchTo, ignoreMute = false }) {
+    if (state.muted && !ignoreMute) return;
     try {
       const c = ctx();
       const src = c.createBufferSource();
@@ -1779,20 +1779,24 @@
   // soft, low, narrow-band "wood" creaks — very quiet and short by design,
   // low cutoff frequencies only (no metallic high end), like a small hinge
   // gently moving on an old wooden box rather than a dramatic cinematic creak
+  // the box's own open/close sounds are physical feedback for the
+  // action, not background ambience — they play even with the birdsong
+  // muted, same as a real box would still creak whether or not you had
+  // music on
   function playLidOpenCreak() {
-    playBuffer({ duration: 0.34, filterFreq: 280, pitchFrom: 220, pitchTo: 330, filterType: 'bandpass', gain: 0.02 });
-    playBuffer({ duration: 0.16, filterFreq: 130, filterType: 'lowpass', gain: 0.015 });
+    playBuffer({ duration: 0.34, filterFreq: 280, pitchFrom: 220, pitchTo: 330, filterType: 'bandpass', gain: 0.02, ignoreMute: true });
+    playBuffer({ duration: 0.16, filterFreq: 130, filterType: 'lowpass', gain: 0.015, ignoreMute: true });
   }
   function playLidCloseCreak() {
-    playBuffer({ duration: 0.26, filterFreq: 260, pitchFrom: 310, pitchTo: 220, filterType: 'bandpass', gain: 0.018 });
-    playBuffer({ duration: 0.14, filterFreq: 120, filterType: 'lowpass', gain: 0.02 });
+    playBuffer({ duration: 0.26, filterFreq: 260, pitchFrom: 310, pitchTo: 220, filterType: 'bandpass', gain: 0.018, ignoreMute: true });
+    playBuffer({ duration: 0.14, filterFreq: 120, filterType: 'lowpass', gain: 0.02, ignoreMute: true });
   }
   // a soft settling click for the moment the lid actually finishes moving —
   // reaching its fully-open rest position, or meeting the box body on the
   // way shut — distinct from the creak, which plays while it's in motion
   function playLidSettleClick() {
-    playBuffer({ duration: 0.045, filterFreq: 1500, filterType: 'bandpass', gain: 0.05 });
-    playBuffer({ duration: 0.05, filterFreq: 500, filterType: 'lowpass', gain: 0.025 });
+    playBuffer({ duration: 0.045, filterFreq: 1500, filterType: 'bandpass', gain: 0.05, ignoreMute: true });
+    playBuffer({ duration: 0.05, filterFreq: 500, filterType: 'lowpass', gain: 0.025, ignoreMute: true });
   }
   function playPaperDrop() { playBuffer({ duration: 0.18, filterFreq: 1600, filterType: 'highpass', gain: 0.09 }); }
 
