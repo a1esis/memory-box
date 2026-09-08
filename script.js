@@ -993,6 +993,53 @@
     return y;
   }
 
+  // re-lands every memory (except excludeRec) on whatever's actually
+  // beneath it right now — needed after a card is removed or dragged
+  // away, since nothing else was ever re-checking whether the cards
+  // that had settled on top of it still have something to rest on.
+  // Without this, deleting or moving a card out from under a pile left
+  // the rest of that pile hovering at their old height indefinitely — a
+  // floating glitch that got more noticeable the more memories were in
+  // the box.
+  //
+  // Cards are processed in their ORIGINAL bottom-to-top order (their
+  // baseY before this pass touches anything), and each one is only
+  // allowed to rest on cards already resettled earlier in that same
+  // order — never on one still waiting its turn, which would still be
+  // sitting at its old (possibly now-too-high) height. Using landingSpot
+  // directly here doesn't work: it treats ANY overlapping card as
+  // something to stack above, with no notion of which one used to be on
+  // top — so a not-yet-resettled card sitting at a stale height would
+  // get treated as a floor to land on, pushing everything upward instead
+  // of collapsing the pile down. Reusing only the original order removes
+  // that ambiguity: a card can never need to rest on one that started
+  // out above it.
+  function resettleAllMemories(excludeRec) {
+    const recs = state.memories
+      .filter(rec => rec !== excludeRec)
+      .sort((a, b) => a.group.userData.baseY - b.group.userData.baseY);
+    const settled = [];
+    for (const rec of recs) {
+      const ud = rec.group.userData;
+      const x = rec.group.position.x, z = rec.group.position.z;
+      let y = INTERIOR.yFloor + ud.verticalHalfSpan;
+      for (const other of settled) {
+        const og = other.group.userData;
+        if (footprintsOverlap(x, z, ud.halfExtentX, ud.halfExtentZ, other.group.position.x, other.group.position.z, og.halfExtentX, og.halfExtentZ)) {
+          const candidate = og.baseY + og.stackClearance + STACK_GAP + ud.stackClearance;
+          if (candidate > y) y = candidate;
+        }
+      }
+      ud.baseY = y;
+      rec.transform.y = y;
+      settled.push(rec);
+      // position.y itself isn't touched — the hover-lift loop in animate()
+      // already eases every card's position toward its baseY every frame,
+      // so a lowered baseY here plays out as the same smooth settle a
+      // dropped card gets, rather than a card teleporting downward
+    }
+  }
+
   function buildMemoryTexture(img, borderStyle) {
     // a written note is already a fully-designed image (torn paper, ruled
     // lines, the text) at the aspect ratio we want — wrapping it in the
@@ -1580,6 +1627,9 @@
       rec.transform.x = rec.group.position.x;
       rec.transform.y = newY;
       rec.transform.z = rec.group.position.z;
+      // whatever this card just left (its old spot) or landed on (its new
+      // spot) may need to re-settle now that it's no longer where it was
+      resettleAllMemories(rec);
       const wasClick = !state.pointerMoved && (performance.now() - state.pointerDownTime) < 350;
       state.dragging = null;
       if (wasClick) openMemoryViewer(rec);
@@ -1651,6 +1701,9 @@
     if (idx !== -1) state.memories.splice(idx, 1);
     if (state.hovered === rec) state.hovered = null;
     if (state.dragging === rec) state.dragging = null;
+    // anything that had settled on top of this one needs to drop down
+    // now that it's gone, instead of hovering where it used to be
+    resettleAllMemories();
   }
 
   /* ----------------------------- add memory (upload) ------------------------ */
@@ -1731,6 +1784,12 @@
     } else {
       hideGuide();
     }
+    // each card lands correctly relative to whatever existed at the
+    // moment it was decoded, but a big batch's images can finish
+    // decoding in a slightly different order than they were added in —
+    // a final settle pass after everything's had a moment to land
+    // guarantees the whole pile ends up flat and gap-free regardless
+    setTimeout(() => resettleAllMemories(), 250);
   }
 
   function resizeDataURL(dataURL, maxDim) {
