@@ -2113,9 +2113,15 @@
     openShareOverlay();
     shareStatus.textContent = 'Gathering the memories…';
 
-    const memories = state.memories.slice();
+    try {
+      // always a fresh box/link — even re-sharing a box that was itself
+      // opened via a share link mints a new one, so whatever's changed
+      // (the engraving, memories added/removed/moved) is saved as its
+      // own new box rather than touching the one anyone else already has
+      const boxRef = db.collection('boxes').doc();
+      await boxRef.set({ createdAt: firebase.firestore.FieldValue.serverTimestamp(), engraving: currentEngraving });
 
-    async function writeAllMemories(boxRef) {
+      const memories = state.memories.slice();
       for (let i = 0; i < memories.length; i++) {
         shareStatus.textContent = `Packing memory ${i + 1} of ${memories.length}…`;
         const rec = memories[i];
@@ -2127,43 +2133,6 @@
           noteText: rec.noteText || null,
           order: i
         });
-      }
-    }
-
-    try {
-      let boxRef;
-      // sharing again from a box that was itself opened via a share link
-      // updates that SAME link in place, rather than minting a new one —
-      // otherwise editing something (the engraving, adding/removing/moving
-      // a memory) on an already-shared box and sharing again looked like
-      // it silently did nothing, since the link everyone already has
-      // would never reflect the change.
-      if (sharedBoxId) {
-        try {
-          boxRef = db.collection('boxes').doc(sharedBoxId);
-          // update the box doc itself before touching any memories, so if
-          // this project's Firestore rules don't allow updating an
-          // existing box (write-once rules are the norm for a link like
-          // this, precisely so a recipient can't tamper with what they
-          // were sent), it fails here with nothing changed yet, rather
-          // than after memories have already been partly cleared out
-          await boxRef.set({ engraving: currentEngraving }, { merge: true });
-          const oldMemories = await boxRef.collection('memories').get();
-          const clearBatch = db.batch();
-          oldMemories.forEach(doc => clearBatch.delete(doc.ref));
-          await clearBatch.commit();
-          await writeAllMemories(boxRef);
-        } catch (updateErr) {
-          // couldn't update the existing link in place — fall back to a
-          // fresh one instead of failing the share outright
-          boxRef = db.collection('boxes').doc();
-          await boxRef.set({ createdAt: firebase.firestore.FieldValue.serverTimestamp(), engraving: currentEngraving });
-          await writeAllMemories(boxRef);
-        }
-      } else {
-        boxRef = db.collection('boxes').doc();
-        await boxRef.set({ createdAt: firebase.firestore.FieldValue.serverTimestamp(), engraving: currentEngraving });
-        await writeAllMemories(boxRef);
       }
 
       const shareUrl = `${location.origin}${location.pathname}?box=${boxRef.id}`;
