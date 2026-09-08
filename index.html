@@ -9,7 +9,7 @@
 <title>Memory Box</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Caveat:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=12" />
+<link rel="stylesheet" href="style.css?v=13" />
 </head>
 <body>
 
@@ -89,7 +89,10 @@
       <div id="song-title">Set the background song</div>
       <input id="song-input" type="text" maxlength="200" placeholder="Paste a YouTube link&hellip;" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
       <div id="song-error" class="hidden">Couldn&rsquo;t find a video in that link &mdash; try pasting the full YouTube URL.</div>
-      <button id="song-save-btn" class="pill">Play this song</button>
+      <div id="song-actions">
+        <button id="song-save-btn" class="pill">Play this song</button>
+        <button id="song-toggle-btn" class="pill">&#10074;&#10074; Pause</button>
+      </div>
       <div id="song-hint">Carries over if you share the box.</div>
       <button id="song-reset-btn">Use the default sound instead</button>
     </div>
@@ -149,6 +152,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js?v=3"></script>
-  <script src="script.js?v=71"></script>
+  <script src="script.js?v=74"></script>
 </body>
 </html>

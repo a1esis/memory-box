@@ -1833,8 +1833,11 @@
   }
 
   // swaps the background track to the given video id, whenever the player
-  // happens to be ready for it
+  // happens to be ready for it — playback (muted or not) is left to
+  // whatever the current sound state already is; call setMuted(false)
+  // alongside this when the swap should also start it playing
   function applySong(videoId) {
+    lastAppliedSongId = videoId;
     if (ytPlayerReady) {
       ytPlayer.loadVideoById(videoId);
       if (state.muted) ytPlayer.pauseVideo();
@@ -1842,6 +1845,10 @@
       pendingSongId = videoId;
     }
   }
+  // the most recently requested video id, so a playback error can tell
+  // whether it was the custom pick that failed (and fall back) rather
+  // than the default track
+  let lastAppliedSongId = null;
 
   window.onYouTubeIframeAPIReady = function () {
     const initialVideoId = pendingSongId || YT_MUSIC_VIDEO_ID;
@@ -1869,6 +1876,22 @@
         // the constructor's old playlist-of-one trick to loop itself
         onStateChange: (e) => {
           if (e.data === YT.PlayerState.ENDED) e.target.playVideo();
+        },
+        // a custom pick can fail to actually play (private, region-locked,
+        // or embedding disabled by the uploader — common for official
+        // music videos) with no other visible symptom than silence, so
+        // catch that and fall back to the default track instead of
+        // leaving the box silent
+        onError: () => {
+          if (lastAppliedSongId && lastAppliedSongId !== YT_MUSIC_VIDEO_ID) {
+            currentSongId = null;
+            currentSongUrl = '';
+            lastAppliedSongId = YT_MUSIC_VIDEO_ID;
+            ytPlayer.loadVideoById(YT_MUSIC_VIDEO_ID);
+            songError.textContent = "That link couldn't be played here (it may not allow embedding) — switched back to the default sound.";
+            songError.classList.remove('hidden');
+            songOverlay.classList.remove('hidden');
+          }
         }
       }
     });
@@ -1898,14 +1921,19 @@
   const soundIcon = document.getElementById('sound-icon');
   function refreshSoundIcon() { soundIcon.textContent = state.muted ? '✕' : '♪'; }
   refreshSoundIcon();
-  soundBtn.addEventListener('click', () => {
-    state.muted = !state.muted;
+  // shared start/stop for whatever track is currently loaded (the default
+  // birdsong or a custom pick) — used by the sound button and by the
+  // song overlay's own play/pause toggle, kept in sync with each other
+  function setMuted(muted) {
+    state.muted = muted;
     refreshSoundIcon();
+    refreshSongPlayToggle();
     if (ytPlayerReady) {
-      if (state.muted) ytPlayer.pauseVideo();
+      if (muted) ytPlayer.pauseVideo();
       else ytPlayer.playVideo();
     }
-  });
+  }
+  soundBtn.addEventListener('click', () => setMuted(!state.muted));
 
   /* ----------------------------- background song picker --------------- */
   // never persisted locally — every fresh visit starts with the default
@@ -1919,12 +1947,18 @@
   const songInput = document.getElementById('song-input');
   const songError = document.getElementById('song-error');
   const songSaveBtn = document.getElementById('song-save-btn');
+  const songToggleBtn = document.getElementById('song-toggle-btn');
   const songResetBtn = document.getElementById('song-reset-btn');
   const songClose = document.getElementById('song-close');
+
+  function refreshSongPlayToggle() {
+    songToggleBtn.innerHTML = state.muted ? '&#9654; Play' : '&#10074;&#10074; Pause';
+  }
 
   function openSongOverlay() {
     songInput.value = currentSongUrl;
     songError.classList.add('hidden');
+    refreshSongPlayToggle();
     songOverlay.classList.remove('hidden');
     setTimeout(() => songInput.focus(), 50);
   }
@@ -1934,20 +1968,28 @@
   songClose.addEventListener('click', closeSongOverlay);
   songOverlay.addEventListener('click', (e) => { if (e.target === songOverlay) closeSongOverlay(); });
   songInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') songSaveBtn.click(); });
+  // explicit start/stop for whatever's currently loaded, right where the
+  // song was picked — kept in sync with the main sound button
+  songToggleBtn.addEventListener('click', () => setMuted(!state.muted));
   songSaveBtn.addEventListener('click', () => {
     const raw = songInput.value.trim();
     if (!raw) { closeSongOverlay(); return; }
     const id = extractYouTubeId(raw);
     if (!id) { songError.classList.remove('hidden'); return; }
+    songError.classList.add('hidden');
     currentSongId = id;
     currentSongUrl = raw;
     applySong(id);
+    // picking a song is an explicit request to hear it — starts it
+    // playing even if sound had been muted before
+    setMuted(false);
     closeSongOverlay();
   });
   songResetBtn.addEventListener('click', () => {
     currentSongId = null;
     currentSongUrl = '';
     applySong(YT_MUSIC_VIDEO_ID);
+    setMuted(false);
     closeSongOverlay();
   });
 

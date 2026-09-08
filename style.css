@@ -435,7 +435,12 @@ html, body {
 }
 #song-error.hidden { display: none; }
 
-#song-save-btn { margin-top: 16px; }
+#song-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 16px;
+}
 
 #song-hint {
   font-size: 13px;
